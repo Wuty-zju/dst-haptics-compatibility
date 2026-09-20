@@ -38,12 +38,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build clean Workshop package
         shell: pwsh
-        run: ./tools/build_release.ps1 -Version 1.4.0
+        run: ./tools/build_release.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: dst-haptics-compat-1.4.0
+          name: dst-haptics-compat
           path: |
-            build/release/dst_haptics_compat-1.4.0.zip
-            build/release/dst_haptics_compat-1.4.0.zip.sha256
+            build/release/dst_haptics_compat-*.zip
+            build/release/dst_haptics_compat-*.zip.sha256
             build/release/preview.jpg
           if-no-files-found: error

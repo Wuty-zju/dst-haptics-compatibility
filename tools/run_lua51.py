@@ -29,9 +29,9 @@ if deps is None:
     raise SystemExit("lua51Original.dll directory not found; pass --lua-deps or set DST_LUA51_DEPS")
 
 mod_root = args.mod_root or first_existing([
+    PROJECT_ROOT if (PROJECT_ROOT / "modinfo.lua").exists() else None,
     PROJECT_ROOT / "work" / "dst_haptics_compat",
     PROJECT_ROOT / "dst_haptics_compat",
-    PROJECT_ROOT if (PROJECT_ROOT / "modinfo.lua").exists() else None,
 ])
 if mod_root is not None:
     os.environ["DST_HAPTICS_MOD_ROOT"] = str(mod_root.resolve())

@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser(description="Parse every mod Lua file with DST'
 parser.add_argument("--mod-root", type=pathlib.Path)
 parser.add_argument("--lua-deps", type=pathlib.Path)
 args = parser.parse_args()
-root = args.mod_root or (project_root / "work" / "dst_haptics_compat")
+root = args.mod_root or project_root
 deps = args.lua_deps or pathlib.Path(os.environ.get(
     "DST_LUA51_DEPS",
     r"C:\Program Files (x86)\Steam\steamapps\common\Don't Starve Together\mods\Luajit\deps",

@@ -1,34 +1,40 @@
 param(
-    [string]$Version = "1.4.0",
+    [string]$Version = "",
     [string]$OutputRoot = (Join-Path (Split-Path $PSScriptRoot -Parent) "build/release")
 )
 
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$sourceInfo = Get-Content -LiteralPath (Join-Path $repo 'modinfo.lua') -Raw
+if ($sourceInfo -notmatch 'version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"') {
+    throw 'Missing semantic version in modinfo.lua'
+}
+$sourceVersion = $Matches[1]
+if ($Version -eq '') { $Version = $sourceVersion }
+if ($Version -ne $sourceVersion) { throw 'Requested version differs from modinfo.lua' }
+$OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
 $stage = Join-Path $OutputRoot "dst_haptics_compat"
 $zip = Join-Path $OutputRoot ("dst_haptics_compat-{0}.zip" -f $Version)
 $checksum = $zip + ".sha256"
 $preview = Join-Path $OutputRoot "preview.jpg"
 
 if (Test-Path -LiteralPath $stage) {
+    $resolvedStage = (Resolve-Path -LiteralPath $stage).Path
+    if ($resolvedStage -ne [IO.Path]::GetFullPath($stage) -or
+        (Get-Item -LiteralPath $stage).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'Refusing to clear a redirected staging folder'
+    }
     Remove-Item -LiteralPath $stage -Recurse -Force
 }
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
-$runtime = @("modinfo.lua", "modmain.lua", "scripts", "README.md", "LICENSE")
+$runtime = @("modinfo.lua", "modmain.lua", "scripts", "README.md", "README.en.md", "LICENSE", "modicon.tex", "modicon.xml")
 foreach ($name in $runtime) {
     $source = Join-Path $repo $name
     if (-not (Test-Path -LiteralPath $source)) {
         throw "Missing release input: $source"
     }
     Copy-Item -LiteralPath $source -Destination $stage -Recurse -Force
-}
-
-foreach ($name in @("modicon.tex", "modicon.xml")) {
-    $source = Join-Path $repo $name
-    if (Test-Path -LiteralPath $source) {
-        Copy-Item -LiteralPath $source -Destination $stage -Force
-    }
 }
 
 $previewSource = Join-Path $repo "preview.jpg"

@@ -5,6 +5,8 @@ description = [[
 Fixes silent native TheHaptics output on Windows. Uses the current haptics.lua plus replicated action bridges, controller-family output profiles, and live in-world configuration.
 ]]
 author = "wuty"
+icon_atlas = "modicon.xml"
+icon = "modicon.tex"
 version = "1.4.0"
 
 api_version = 10
