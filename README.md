@@ -4,7 +4,7 @@
 
 让游戏中能被客户端观察到的原版震动事件，通过已可工作的手柄输出接口恢复反馈。纯客户端安装，支持局内调整强度、时长和手柄响应方式。
 
-当前 `release/1.5.0` 为开发分支；正式可下载版本以[发布页面](https://github.com/Wuty-zju/dst-haptics-compatibility/releases)为准。
+当前版本为 1.5.0，安装包见[发布页面](https://github.com/Wuty-zju/dst-haptics-compatibility/releases)。
 
 ## 安装
 

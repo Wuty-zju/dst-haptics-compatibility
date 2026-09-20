@@ -32,6 +32,6 @@ Keep DST's own Controller Vibration setting enabled when using Compatibility mod
 
 Source and issue tracking: https://github.com/Wuty-zju/dst-haptics-compatibility
 
-## 1.5.0 Change Note（候选，待验收）
+## 1.5.0 Change Note
 
 Added independent 0%–200% intensity/duration controls in 5% steps, optional device adaptation, independent loop envelope mixing, pause/disconnect cancellation, cached native profiles, separate Chinese/English guides and minimal original artwork. Physical controller acceptance remains pending; 100% refers to the native-compatible baseline, not sample-exact motor output.

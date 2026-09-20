@@ -1,6 +1,6 @@
 # DST Haptics Compatibility 1.5.0
 
-状态：候选版；实际游戏和手柄体感验收待完成。
+状态：1.5.0 发布版。按用户要求缩减实机流程，保留代码回归、包校验与一次真实加载检查。
 
 ## 本版变化
 
@@ -18,7 +18,7 @@ Lua 5.1 语法与全部行为测试通过；492 条本机原版定义完成双�
 
 100% 是未增加用户倍率的原版兼容基准。精确原生马达波形、绝对时长与物理体感不能由 Lua 自动证明。DS4/DS5 实际输出仍依赖 DST/Steam Input 提供通道；不提供 DualSense 自适应扳机或原生高频触觉。
 
-当前候选安装文件已与构建包核对，尚未取得 1.5.0 真实游戏加载和三类手柄完整验收结果。完整状态见 docs/reports/1.5.0-review.md。
+安装文件已与构建包核对。连接 DualSense 时启动 DST，日志确认 Version:1.5.0 与 492 条定义/489 个唯一事件初始化成功，未发现本模组加载错误。未执行三类手柄完整物理体感矩阵。完整状态见 docs/reports/1.5.0-review.md。
 
 ## 安装
 
@@ -28,4 +28,4 @@ Lua 5.1 语法与全部行为测试通过；492 条本机原版定义完成双�
 
 Version 1.5.0 adds independent intensity and duration controls from 0% to 200% in 5% steps, optional controller-family adaptation, independent loop lifetimes, stale-pulse cancellation, cached native profiles and original minimal artwork. Chinese and English guides are separate.
 
-This is an acceptance candidate. Automated Lua 5.1 checks pass, including 40,344 native-definition tuning assertions. Physical Xbox/DS4/DualSense acceptance and the new in-game load remain pending. The 100% reference is the native-compatible envelope baseline, not a claim of sample-exact native motor output.
+Automated Lua 5.1 checks pass, including 40,344 native-definition tuning assertions. DST successfully loaded version 1.5.0 while DualSense was connected. The user requested reduced physical testing; a complete Xbox/DS4/DualSense feel matrix was not performed. The 100% reference is the native-compatible envelope baseline, not a claim of sample-exact native motor output.

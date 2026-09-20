@@ -2,7 +2,7 @@
 
 Code support means DST recognizes the device type and exposes it through `TheInputProxy`. Physical acceptance additionally requires a real motor test on that route; Lua cannot infer it.
 
-2026-09-20 / 1.5.0 development: Windows currently enumerates both Xbox Wireless Controller and DualSense Wireless Controller with OK status. This supersedes the earlier assumption that no DS5 is present. Enumeration does not prove motor output. The running DST log still reports 1.4.0; 1.5.0 physical calibration and in-game acceptance are pending. No DualShock 4 was found in the present-device query.
+2026-09-20 / 1.5.0 release check: after the user connected DS5 and exited DST, Windows enumerated DualSense Wireless Controller with OK status. DST was restarted and its fresh log confirmed version 1.5.0 and 489 indexed events (492 definitions), without a mod load error. The user authorized reduced physical testing. USB/Bluetooth subjective feel tests remain unperformed; enumeration and successful loading do not prove physical motor response. No DualShock 4 was found in the present-device query.
 
 | Controller | Connection | DST route | Status | Evidence needed |
 |---|---|---|---|---|

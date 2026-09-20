@@ -42,7 +42,7 @@ The bridge is deliberately narrow:
 
 - Intensity uses a monotonic non-saturating mapping `1-exp(-0.35*x)` before user/category/spatial calibration.
 - UI/HUD bypasses world distance. PLAYER, DANGER, ENVIRONMENT and BOSS use category-specific near/far policies with smoothstep falloff.
-- `player_only` requires local `ThePlayer`; local FrontEnd/FocalPoint emitters are accepted only as a provable local HUD context.
+- `player_only` requires local `ThePlayer` or a verified local FrontEnd/FocalPoint emitter; the latter represent listener-local events across native categories.
 - Named loops track `PlaySound(event,name)`, `PlayingSound`, `SetVolume`, `KillSound`, `KillAllSounds`, entity validity, pause, controller availability and world unload.
 - Compatibility mode suppresses native `TheHaptics` output. Turning it off stops compatibility output and restores the native setting, preventing future double rumble.
 
@@ -56,3 +56,8 @@ Lua cannot send DS4/DS5 USB or Bluetooth HID reports. Physical output on those d
 
 The game ships 1722 mono 16-bit, 882 Hz haptic WAVs, but Lua exposes neither sample playback nor motor-state feedback. The mod uses measured RMS envelopes for core families and semantic multi-pulse envelopes elsewhere. It preserves event semantics, relative intensity, broad duration/rhythm and lifecycle; it does not claim sample-identical Klei waveforms.
 
+## 1.5.0 tuning and lifecycle
+
+Native profiles are cached once. A shared configuration reader supplies startup and live settings. Global, category and applicable semantic intensity/duration axes are independently bounded to 0..2; the UI exposes 0.05 steps. Device compensation is applied to the baseline pulse before user duration scaling, preserving even 5% settings. Disabling controller adaptation selects the generic response.
+
+Named loops mix calibrated contributions by their individual expiration times using sorted suffix maxima, O(n log n). Short strong contributions do not inherit weak long durations. Settings changes and output gating invalidate stale callbacks; a paused event is rejected before scheduling. Physical timing remains limited by DST's scheduler resolution and the controller output backend.

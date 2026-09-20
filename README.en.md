@@ -8,7 +8,7 @@ A client-only compatibility mod for Don't Starve Together on Windows. It connect
 
 Download a published package from [Releases](https://github.com/Wuty-zju/dst-haptics-compatibility/releases). Extract it so `mods/dst_haptics_compat/modinfo.lua` sits inside your DST installation. Enable the client mod, then enable the game's Controller Vibration setting. Servers and other players do not need the mod.
 
-The `release/1.5.0` branch is under development. Its changes are not a declaration of physical controller acceptance.
+Current version: 1.5.0. Controller code coverage is distinct from physical motor acceptance.
 
 ## Adjust feedback in game
 
