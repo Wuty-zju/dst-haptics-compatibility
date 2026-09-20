@@ -15,6 +15,8 @@ assert(load_profiles, profiles_error)
 local Profiles = load_profiles()
 
 local indexed = {}
+local Tuning = dofile(mod_root .. "/scripts/haptic_tuning.lua")
+local tuning_checks = 0
 local vibrating = 0
 for i = 1, #effects do
     local effect = effects[i]
@@ -24,6 +26,15 @@ for i = 1, #effects do
         local profile = Profiles.Get(effect)
         assert(type(profile) == "table", "no profile for " .. effect.event)
         assert(profile.loop == true or type(profile.pulses) == "table", "invalid profile for " .. effect.event)
+        local category = ({ DANGER = "danger", BOSS = "boss", ENVIRONMENT = "environment", UI = "ui" })[effect.category] or "player"
+        for _, suffix in ipairs({ "_scale", "_duration" }) do
+            for step = 0, 40 do
+                local ratio = step / 20
+                local value = Tuning.Scale({ [category .. suffix] = ratio }, effect, profile, suffix, false)
+                assert(math.abs(value - ratio) < 1e-9, effect.event .. " native category tuning failed")
+                tuning_checks = tuning_checks + 1
+            end
+        end
     end
 end
 
@@ -50,3 +61,4 @@ assert(swing.factor < hit_large.factor, "swing and hit were not separated")
 assert(hit_large.factor > hit_small.factor, "target size did not affect material impact")
 
 print(string.format("original haptics profile test passed: definitions=%d vibrating=%d", #effects, vibrating))
+print(string.format("original event tuning checks passed: %d", tuning_checks))

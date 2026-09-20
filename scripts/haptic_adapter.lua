@@ -47,6 +47,7 @@ function Adapter.Install(config, LoadLocalModule)
     local Profiles = LoadLocalModule("scripts/haptic_profiles.lua")
     local Parameters = LoadLocalModule("scripts/haptic_parameters.lua")
     local Mixer = LoadLocalModule("scripts/haptic_mixer.lua")
+    local Tuning = LoadLocalModule("scripts/haptic_tuning.lua")
     local L = LoadLocalModule("scripts/localization.lua")
 
     local ok, native_effects = pcall(G.require, "haptics")
@@ -448,29 +449,7 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local function EffectScale(effect, profile, suffix)
-        suffix = suffix or "_scale"
-        local kind = profile.kind
-        local category_scale
-        if effect.category == "DANGER" then
-            category_scale = state.config["danger" .. suffix]
-        elseif effect.category == "BOSS" then
-            category_scale = state.config["boss" .. suffix]
-        elseif effect.category == "ENVIRONMENT" then
-            category_scale = state.config["environment" .. suffix]
-        elseif IsUIEffect(effect) then
-            category_scale = state.config["ui" .. suffix]
-        else
-            category_scale = state.config["player" .. suffix]
-        end
-        local semantic_scale = kind == "tool" and state.config["tool" .. suffix]
-            or kind == "combat" and state.config["combat" .. suffix]
-            or 1
-        local result = Clamp(NumberOr(category_scale, 1), 0, 2)
-            * Clamp(NumberOr(semantic_scale, 1), 0, 2)
-        if profile.loop then
-            result = result * Clamp(NumberOr(state.config["loop" .. suffix], 1), 0, 2)
-        end
-        return result
+        return Tuning.Scale(state.config, effect, profile, suffix, IsUIEffect(effect))
     end
 
     local function AddPulse(channel, duration, magnitude, duration_scale)

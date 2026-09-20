@@ -435,3 +435,20 @@ world.onremove()
 assert(stop_count == stops_before_unload + 1, "world unload did not stop all vibration")
 
 print("adapter behavior tests passed")
+
+if os.getenv("DST_HAPTICS_BENCHMARK") == "1" then
+    collectgarbage("collect")
+    local started = os.clock()
+    for i = 1, 200000 do
+        SoundEmitter.PlaySound(player_emitter, "ordinary/unmatched/sound")
+    end
+    local elapsed = os.clock() - started
+    print(string.format("BENCH unmatched_sound calls=200000 elapsed=%.6fs per_call=%.3fus", elapsed, elapsed * 1e6 / 200000))
+    local Mixer = dofile(source_root .. "scripts/haptic_mixer.lua")
+    local contributions = {}
+    for i = 1, 64 do contributions[i] = { duration = i * 0.002, magnitude = (65-i)/65 } end
+    started = os.clock()
+    for i = 1, 10000 do Mixer.Build(contributions) end
+    elapsed = os.clock() - started
+    print(string.format("BENCH mixer loops=64 samples=10000 elapsed=%.6fs per_sample=%.3fus", elapsed, elapsed * 100))
+end
