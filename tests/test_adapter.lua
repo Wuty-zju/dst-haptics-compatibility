@@ -376,6 +376,27 @@ RunDelayed()
 api.ApplyConfig({ loop_duration = 1 })
 
 -- User duration scales the complete envelope after device response. In
+-- A pause observed by the output sampler cancels already queued tails. Resuming
+-- must not replay an old impact, even when the controller has reconnected.
+now = now + 1
+SoundEmitter.PlaySound(player_emitter, "dontstarve/characters/walter/woby/big/footstep")
+assert(#delayed > 0, "test requires a multi-pulse envelope")
+paused = true
+periodic[1].fn()
+paused = false
+before = #vibrations
+RunDelayed()
+assert(#vibrations == before, "paused envelope resumed stale pulses")
+now = now + 1
+SoundEmitter.PlaySound(player_emitter, "dontstarve/characters/walter/woby/big/footstep")
+controller_enabled = false
+periodic[1].fn()
+controller_enabled = true
+before = #vibrations
+RunDelayed()
+assert(#vibrations == before, "reconnected controller replayed stale pulses")
+
+-- User duration scales the complete envelope after device response. In
 -- particular DS4/DS5 minimum pulse widths must not erase the 5% setting.
 RunDelayed()
 for _, family in ipairs({ "xbox", "ds4", "ds5" }) do

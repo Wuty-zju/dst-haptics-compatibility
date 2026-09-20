@@ -25,7 +25,8 @@ local function Clamp(value, minimum, maximum)
 end
 
 local function NumberOr(value, fallback)
-    return type(value) == "number" and value or fallback
+    return type(value) == "number" and value == value
+        and value ~= math.huge and value ~= -math.huge and value or fallback
 end
 
 function Adapter.Install(config, LoadLocalModule)
@@ -73,6 +74,7 @@ function Adapter.Install(config, LoadLocalModule)
         last_controller_name = nil,
         generation = 0,
         loop_revision = 0,
+        output_was_allowed = false,
         listener_position = nil,
         last_special_hurt_time = nil,
         metrics =
@@ -259,13 +261,20 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local function OutputAllowed()
-        if OutputMode() ~= "compatibility" or not ProfileAllowsVibration() or IsPaused() then
+        local allowed = OutputMode() == "compatibility" and ProfileAllowsVibration() and not IsPaused()
+        local id = allowed and GetControllerID() or nil
+        if not id then
+            if state.output_was_allowed then
+                state.generation = state.generation + 1
+                state.loop_revision = state.loop_revision + 1
+                state.had_loop_output = false
+                pcall(function() G.TheInputProxy:StopVibration() end)
+            end
+            state.output_was_allowed = false
+            state.last_controller_id = nil
             return false
         end
-        local id = GetControllerID()
-        if id == nil then
-            return false
-        end
+        state.output_was_allowed = true
         RefreshControllerOutput(id)
         return true
     end
@@ -487,6 +496,9 @@ function Adapter.Install(config, LoadLocalModule)
             * NumberOr(profile.factor, 1)
             * EffectScale(effect, profile)
         base = base * Clamp(NumberOr(volume, 1), 0, 1) * spatial * parameter_scale
+        if base <= 0 then
+            return
+        end
         local channel = ChannelFor(effect, profile)
         local strongest = 0
         local generation = state.generation

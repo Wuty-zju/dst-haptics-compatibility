@@ -3,25 +3,25 @@
 local M = {}
 
 function M.Build(contributions)
-    local ends, seen = {}, {}
+    local sorted = {}
     for i = 1, #contributions do
         local pulse = contributions[i]
-        if pulse.duration > 0 and pulse.magnitude > 0 and not seen[pulse.duration] then
-            seen[pulse.duration] = true
-            ends[#ends + 1] = pulse.duration
+        if pulse.duration > 0 and pulse.magnitude > 0 then
+            sorted[#sorted + 1] = pulse
         end
     end
-    table.sort(ends)
+    table.sort(sorted, function(a, b) return a.duration < b.duration end)
+    -- Suffix maxima make mixing O(n log n), not a scan of all contributions
+    -- at every boundary. No input profile or contribution is mutated.
+    local peaks, peak = {}, 0
+    for i = #sorted, 1, -1 do
+        peak = math.max(peak, sorted[i].magnitude)
+        peaks[i] = peak
+    end
     local result, start = {}, 0
-    for i = 1, #ends do
-        local finish, magnitude = ends[i], 0
-        for j = 1, #contributions do
-            local pulse = contributions[j]
-            if pulse.duration >= finish then
-                magnitude = math.max(magnitude, pulse.magnitude)
-            end
-        end
-        if magnitude > 0 then
+    for i = 1, #sorted do
+        local finish, magnitude = sorted[i].duration, peaks[i]
+        if finish > start then
             local previous = result[#result]
             if previous and previous.magnitude == magnitude then
                 previous.duration = finish - previous.delay

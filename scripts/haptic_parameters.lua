@@ -13,7 +13,7 @@ local function Clamp(value, minimum, maximum)
 end
 
 local function Linear(value, input_max, output_min)
-    if type(value) ~= "number" then
+    if type(value) ~= "number" or value ~= value then
         return 1
     end
     local normalized = input_max > 0 and Clamp(value / input_max, 0, 1) or 1
@@ -68,7 +68,7 @@ function M.GetScale(event, params)
         return 1, nil
     end
     local ok, scale = G.pcall(policy, params)
-    if not ok or type(scale) ~= "number" then
+    if not ok or type(scale) ~= "number" or scale ~= scale then
         return 1, "parameter_policy_failed"
     end
     return Clamp(scale, 0, 1), "native_parameter"
