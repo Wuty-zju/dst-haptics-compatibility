@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>DST Haptics Compatibility</title>
+  <desc>Original rounded line controller with three tactile wave levels on an ivory field.</desc>
+  <rect width="1024" height="1024" rx="224" fill="#f5f5f0"/>
+  <g fill="none" stroke="#22272c" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M366 410 C326 410 300 434 287 485 L255 612 C240 674 272 715 310 692 L384 630 H640 L714 692 C752 715 784 674 769 612 L737 485 C724 434 698 410 658 410 Z"/>
+    <path d="M340 512 H412 M376 476 V548"/>
+    <circle cx="628" cy="489" r="7" fill="#22272c" stroke="none"/>
+    <circle cx="672" cy="533" r="7" fill="#22272c" stroke="none"/>
+    <circle cx="584" cy="533" r="7" fill="#22272c" stroke="none"/>
+    <circle cx="628" cy="577" r="7" fill="#22272c" stroke="none"/>
+  </g>
+  <g fill="none" stroke="#398478" stroke-width="22" stroke-linecap="round">
+    <path d="M448 341 Q512 293 576 341"/>
+    <path d="M415 288 Q512 214 609 288"/>
+    <path d="M384 235 Q512 136 640 235"/>
+  </g>
+</svg>
