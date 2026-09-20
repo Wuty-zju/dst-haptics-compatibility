@@ -17,15 +17,11 @@ all_clients_require_mod = false
 server_only_mod = false
 
 local function ScaleOptions()
-    return
-    {
-        { description = "关闭 / OFF", data = 0.00 },
-        { description = "50%", data = 0.50 },
-        { description = "75%", data = 0.75 },
-        { description = "100%", data = 1.00 },
-        { description = "125%", data = 1.25 },
-        { description = "150%", data = 1.50 },
-    }
+    local options = {}
+    for percent = 0, 200, 5 do
+        options[#options + 1] = { description = percent .. "%", data = percent / 100 }
+    end
+    return options
 end
 
 configuration_options =
@@ -68,14 +64,7 @@ configuration_options =
         name = "strength",
         label = "总体震动强度 / Overall Strength",
         hover = "在保留原版相对层级的基础上缩放最终输出。 / Scales final output while preserving original relative levels.",
-        options =
-        {
-            { description = "50%", data = 0.50 },
-            { description = "75%", data = 0.75 },
-            { description = "100%", data = 1.00 },
-            { description = "125%", data = 1.25 },
-            { description = "150%", data = 1.50 },
-        },
+        options = ScaleOptions(),
         default = 1.00,
     },
     {
@@ -196,4 +185,41 @@ configuration_options =
         },
         default = false,
     },
+}
+
+-- Keep saved 1.4 configuration keys stable. All native categories, including
+-- future events assigned to those categories, inherit these two tuning axes.
+local durations =
+{
+    { "duration", "总体时长 / Overall Duration" },
+    { "tool_duration", "工具时长 / Tool Duration" },
+    { "combat_duration", "战斗时长 / Combat Duration" },
+    { "danger_duration", "危险时长 / Danger Duration" },
+    { "player_duration", "玩家交互时长 / Player Duration" },
+    { "boss_duration", "Boss 时长 / Boss Duration" },
+    { "environment_duration", "环境时长 / Environment Duration" },
+    { "ui_duration", "界面时长 / UI Duration" },
+    { "loop_duration", "循环单次时长 / Loop Pulse Duration" },
+}
+for i = 1, #durations do
+    configuration_options[#configuration_options + 1] =
+    {
+        name = durations[i][1],
+        label = durations[i][2],
+        hover = "100% 为原版兼容包络基准；0% 关闭此类型。循环仅调整单次脉冲，仍随声音停止。 / 100% uses the native-compatible envelope baseline; 0% mutes this type. Loops retain sound lifecycle.",
+        options = ScaleOptions(),
+        default = 1,
+    }
+end
+configuration_options[#configuration_options + 1] =
+{
+    name = "controller_adaptation",
+    label = "手柄专用适配 / Controller Adaptation",
+    hover = "开启设备响应曲线；关闭回退通用输出，保留事件与百分比设置。 / Device response curves, or generic output with the same events and percentage settings.",
+    options =
+    {
+        { description = "适配 / Adapted", data = true },
+        { description = "通用 / Generic", data = false },
+    },
+    default = true,
 }

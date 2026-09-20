@@ -58,6 +58,7 @@ function Adapter.Install(config, LoadLocalModule)
         installed = true,
         config = config,
         effects = {},
+        profiles = {},
         definitions = 0,
         duplicate_events = 0,
         recent = {},
@@ -107,6 +108,11 @@ function Adapter.Install(config, LoadLocalModule)
     local unique_count = 0
     for _ in pairs(state.effects) do
         unique_count = unique_count + 1
+    end
+    -- Resolve immutable event envelopes once, including the final duplicate
+    -- definition. User tuning is applied at output time without mutating them.
+    for event, effect in pairs(state.effects) do
+        state.profiles[event] = Profiles.Get(effect)
     end
 
     local function FormatParams(params)
@@ -416,54 +422,62 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local function GetOutputCalibration()
-        local hardware = CONTROLLER_CALIBRATION[GetControllerFamily()] or CONTROLLER_CALIBRATION.xbox
+        local family = state.config.controller_adaptation == false and "xbox" or GetControllerFamily()
+        local hardware = CONTROLLER_CALIBRATION[family] or CONTROLLER_CALIBRATION.xbox
         local response = RESPONSE_CALIBRATION[state.config.response_mode] or RESPONSE_CALIBRATION.detail
         return hardware, response
     end
 
-    local function CalibratePulse(duration, magnitude)
+    local function CalibratePulse(duration, magnitude, duration_scale)
         local hardware, response = GetOutputCalibration()
         local calibrated_duration = math.max(hardware.minimum_duration, duration * hardware.time * response.time)
+            * (duration_scale or 1)
         local calibrated_magnitude = (Clamp(magnitude, 0, 1) ^ hardware.gamma) * hardware.gain * response.gain
         return calibrated_duration, Clamp(calibrated_magnitude, 0, 1)
     end
 
-    local function EffectScale(effect, profile)
+    local function EffectScale(effect, profile, suffix)
+        suffix = suffix or "_scale"
         local kind = profile.kind
         local category_scale
         if effect.category == "DANGER" then
-            category_scale = state.config.danger_scale
+            category_scale = state.config["danger" .. suffix]
         elseif effect.category == "BOSS" then
-            category_scale = state.config.boss_scale
+            category_scale = state.config["boss" .. suffix]
         elseif effect.category == "ENVIRONMENT" then
-            category_scale = state.config.environment_scale
+            category_scale = state.config["environment" .. suffix]
         elseif IsUIEffect(effect) then
-            category_scale = state.config.ui_scale
+            category_scale = state.config["ui" .. suffix]
         else
-            category_scale = state.config.player_scale
+            category_scale = state.config["player" .. suffix]
         end
-        local semantic_scale = kind == "tool" and state.config.tool_scale
-            or kind == "combat" and state.config.combat_scale
+        local semantic_scale = kind == "tool" and state.config["tool" .. suffix]
+            or kind == "combat" and state.config["combat" .. suffix]
             or 1
         local result = Clamp(NumberOr(category_scale, 1), 0, 2)
             * Clamp(NumberOr(semantic_scale, 1), 0, 2)
         if profile.loop then
-            result = result * Clamp(NumberOr(state.config.loop_scale, 1), 0, 2)
+            result = result * Clamp(NumberOr(state.config["loop" .. suffix], 1), 0, 2)
         end
         return result
     end
 
-    local function AddPulse(channel, duration, magnitude)
-        if magnitude <= 0 or duration <= 0 or not OutputAllowed() then
+    local function AddPulse(channel, duration, magnitude, duration_scale)
+        if magnitude <= 0 or duration <= 0 or duration_scale == 0 or not OutputAllowed() then
             return
         end
-        duration, magnitude = CalibratePulse(duration, magnitude)
+        duration, magnitude = CalibratePulse(duration, magnitude, duration_scale)
         SuppressNative()
         G.TheInputProxy:AddVibration(channel, duration, magnitude, false)
         state.metrics.pulses = state.metrics.pulses + 1
     end
 
     local function ScheduleProfile(effect, entity, profile, volume, spatial, distance, source, params)
+        local duration_scale = Clamp(NumberOr(state.config.duration, 1), 0, 2)
+            * EffectScale(effect, profile, "_duration")
+        if duration_scale <= 0 then
+            return
+        end
         local raw = NumberOr(effect.vibration_intensity, 1)
         local parameter_scale = Parameters.GetScale(effect.event, params)
         local base = MapIntensity(raw)
@@ -475,24 +489,24 @@ function Adapter.Install(config, LoadLocalModule)
         local strongest = 0
         local generation = state.generation
         local hardware, response = GetOutputCalibration()
-        local time_scale = hardware.time * response.time
+        local time_scale = hardware.time * response.time * duration_scale
         for i = 1, #profile.pulses do
             local pulse = profile.pulses[i]
             local magnitude = Clamp(base * pulse[3], 0, 1)
             local _, calibrated = CalibratePulse(pulse[2], magnitude)
             strongest = math.max(strongest, calibrated)
             if pulse[1] <= 0 then
-                AddPulse(channel, pulse[2], magnitude)
+                AddPulse(channel, pulse[2], magnitude, duration_scale)
             else
                 state.metrics.scheduled_pulses = state.metrics.scheduled_pulses + 1
                 G.scheduler:ExecuteInTime(pulse[1] * time_scale, function()
                     if generation == state.generation then
-                        AddPulse(channel, pulse[2], magnitude)
+                        AddPulse(channel, pulse[2], magnitude, duration_scale)
                     end
                 end)
             end
         end
-        DebugLog(effect, entity, distance, raw, strongest, profile.total, channel, false, "accepted", source, params, parameter_scale)
+        DebugLog(effect, entity, distance, raw, strongest, profile.total * time_scale, channel, false, "accepted", source, params, parameter_scale)
     end
 
     local function LoopKey(emitter, name)
@@ -544,7 +558,7 @@ function Adapter.Install(config, LoadLocalModule)
             return false
         end
 
-        local profile = Profiles.Get(effect)
+        local profile = state.profiles[event]
         if output_mode == "diagnostic" then
             local parameter_scale = Parameters.GetScale(effect.event, params)
             DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, profile.total, ChannelFor(effect, profile), true, "diagnostic_no_output", source, params, parameter_scale)
@@ -608,7 +622,7 @@ function Adapter.Install(config, LoadLocalModule)
         if not local_context and G.TheFocalPoint ~= nil then
             local_context = emitter == G.TheFocalPoint.SoundEmitter
         end
-        local profile = Profiles.Get(effect)
+        local profile = state.profiles[event]
         if profile.loop then
             local mode = OutputMode()
             if mode == "native" then

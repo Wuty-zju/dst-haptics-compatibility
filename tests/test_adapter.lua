@@ -357,6 +357,38 @@ periodic[1].fn()
 assert(#vibrations == before + 1, "live loop parameter did not restore vibration")
 SoundEmitter.KillSound(crab_emitter, "crabmagic")
 
+-- User duration scales the complete envelope after device response. In
+-- particular DS4/DS5 minimum pulse widths must not erase the 5% setting.
+RunDelayed()
+for _, family in ipairs({ "xbox", "ds4", "ds5" }) do
+    api.ApplyConfig({ controller_profile = family, controller_adaptation = true, duration = 1, ui_duration = 1 })
+    now = now + 1
+    SoundEmitter.PlaySound(Emitter(nil), "test/ui/click")
+    local baseline = vibrations[#vibrations].duration
+    for _, percent in ipairs({ 0, 0.05, 0.5, 1, 2 }) do
+        api.ApplyConfig({ ui_duration = percent })
+        now = now + 1
+        before = #vibrations
+        local tasks = #delayed
+        SoundEmitter.PlaySound(Emitter(nil), "test/ui/click")
+        if percent == 0 then
+            assert(#vibrations == before and #delayed == tasks, "zero duration scheduled output")
+        else
+            assert(#vibrations == before + 1)
+            assert(math.abs(vibrations[#vibrations].duration - baseline * percent) < 0.000001,
+                family .. " duration ratio changed")
+        end
+    end
+end
+api.ApplyConfig({ controller_profile = "ds5", controller_adaptation = false, ui_duration = 1 })
+now = now + 1
+SoundEmitter.PlaySound(Emitter(nil), "test/ui/click")
+local generic_duration = vibrations[#vibrations].duration
+api.ApplyConfig({ controller_profile = "xbox", controller_adaptation = true })
+now = now + 1
+SoundEmitter.PlaySound(Emitter(nil), "test/ui/click")
+assert(generic_duration == vibrations[#vibrations].duration, "generic fallback retained DS5 timing")
+
 local world = { ListenForEvent = function(self, event, fn) assert(event == "onremove"); self.onremove = fn end }
 world_postinit(world)
 local stops_before_unload = stop_count

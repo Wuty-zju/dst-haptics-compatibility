@@ -26,6 +26,7 @@ jobs:
           lua5.1 tests/test_adapter.lua
           lua5.1 tests/test_client_action_bridge.lua
           lua5.1 tests/test_haptic_parameters.lua
+          lua5.1 tests/test_haptic_config.lua
           lua5.1 tests/test_runtime_settings.lua
       - name: Validate Python tools
         run: python -m compileall -q tools
