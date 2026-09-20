@@ -141,6 +141,15 @@ local function LoadLocalModule(relative)
 end
 
 local Adapter = LoadLocalModule("scripts/haptic_adapter.lua")
+-- A previously loaded mod has already wrapped PlaySound. Our hook must chain
+-- it, including the nil gap and trailing arguments in the engine signature.
+local prior_calls, prior_tail = 0, nil
+local engine_play = SoundEmitter.PlaySound
+SoundEmitter.PlaySound = function(emitter, event, name, volume, ...)
+    prior_calls = prior_calls + 1
+    prior_tail = { n = select("#", ...), ... }
+    return engine_play(emitter, event, name, volume, ...)
+end
 local api = Adapter.Install({ language = "en", strength = 1, debug = false }, LoadLocalModule)
 assert(api ~= nil and api.Emit ~= nil)
 assert(SoundEmitter._dst_haptics_compat ~= nil)
@@ -427,6 +436,56 @@ api.ApplyConfig({ controller_profile = "xbox", controller_adaptation = true })
 now = now + 1
 SoundEmitter.PlaySound(Emitter(nil), "test/ui/click")
 assert(generic_duration == vibrations[#vibrations].duration, "generic fallback retained DS5 timing")
+
+-- Every supported family must preserve the complete native intensity order.
+for _, family in ipairs({ "xbox", "ds4", "ds5" }) do
+    api.ApplyConfig({ controller_profile = family, controller_adaptation = true, strength = 1 })
+    local previous = 0
+    for _, raw in ipairs({ 0.5, 1, 1.5, 2, 2.5, 3, 10 }) do
+        api.GetEffect("test/player").vibration_intensity = raw
+        now = now + 1
+        SoundEmitter.PlaySound(player_emitter, "test/player")
+        local magnitude = vibrations[#vibrations].magnitude
+        assert(magnitude > previous and magnitude <= 1, family .. " collapsed a native intensity level")
+        previous = magnitude
+    end
+    api.GetEffect("test/player").vibration_intensity = 1
+    previous = 0
+    for step = 0, 40 do
+        api.ApplyConfig({ strength = step / 20 })
+        now = now + 1
+        before = #vibrations
+        SoundEmitter.PlaySound(player_emitter, "test/player")
+        if step == 0 then
+            assert(#vibrations == before, "zero global strength emitted")
+        else
+            local magnitude = vibrations[#vibrations].magnitude
+            assert(magnitude > previous, family .. " collapsed a 5% tuning level at ordinary native intensity")
+            previous = magnitude
+        end
+    end
+end
+api.ApplyConfig({ strength = 1, controller_profile = "xbox" })
+
+local installed_play = SoundEmitter.PlaySound
+local scheduler_count = #periodic
+local reloaded = Adapter.Install(api.GetState().config, LoadLocalModule)
+assert(reloaded == api and SoundEmitter.PlaySound == installed_play and #periodic == scheduler_count,
+    "reload added another wrapper or periodic worker")
+local later_calls = 0
+SoundEmitter.PlaySound = function(...)
+    later_calls = later_calls + 1
+    return installed_play(...)
+end
+now = now + 1
+before = #vibrations
+local old_prior_calls = prior_calls
+local r1, r2, r3 = SoundEmitter.PlaySound(player_emitter, "test/player", nil, 1, "extra", nil, "last")
+assert(r1 == "sound-ok" and r2 == nil and r3 == "tail", "chained return tuple changed")
+assert(prior_calls == old_prior_calls + 1 and later_calls == 1, "hook chain skipped a mod")
+assert(prior_tail.n == 3 and prior_tail[1] == "extra" and prior_tail[2] == nil and prior_tail[3] == "last",
+    "hook chain changed trailing arguments")
+assert(#vibrations == before + 1, "hook chain duplicated haptic output")
 
 local world = { ListenForEvent = function(self, event, fn) assert(event == "onremove"); self.onremove = fn end }
 world_postinit(world)
