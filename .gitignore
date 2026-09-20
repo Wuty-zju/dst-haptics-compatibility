@@ -1,0 +1,8 @@
+*.log
+*.zip
+__pycache__/
+.pytest_cache/
+build/
+outputs/
+work/
+

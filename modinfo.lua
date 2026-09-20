@@ -1,11 +1,11 @@
 name = "DST Haptics Compatibility / 手柄震动兼容"
 description = [[
-修复 Windows 下原版 TheHaptics 无输出的问题。动态读取当前版本 haptics.lua，补齐服务器声音缺口，提供 Xbox/DS4/DualSense 输出模式和可即时生效的局内细粒度配置。
+修复 Windows 下原版 TheHaptics 无输出的问题。动态读取当前版本 haptics.lua，桥接可由服务器回传证明的声音缺口，提供 Xbox/DS4/DualSense 输出模式和可即时生效的局内细粒度配置。
 
 Fixes silent native TheHaptics output on Windows. Uses the current haptics.lua plus replicated action bridges, controller-family output profiles, and live in-world configuration.
 ]]
-author = "Local compatibility build"
-version = "1.2.0"
+author = "wuty"
+version = "1.3.0"
 
 api_version = 10
 dst_compatible = true
@@ -33,7 +33,7 @@ configuration_options =
     {
         name = "compatibility",
         label = "震动适配 / Vibration Compatibility",
-        hover = "开启兼容输出；关闭时不注入任何声音钩子，并保留原版行为。 / Enable compatibility output; OFF leaves native behavior untouched.",
+        hover = "开启兼容输出；关闭时钩子完整旁路、停止兼容震动并恢复原版行为。 / Enable compatibility output; OFF fully bypasses hooks, stops compatibility rumble, and restores native behavior.",
         options =
         {
             { description = "开启 / ON", data = true },

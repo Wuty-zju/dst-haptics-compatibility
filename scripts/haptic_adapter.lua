@@ -1,6 +1,7 @@
 local G = GLOBAL
 local unpack = G.unpack
 local pairs = G.pairs
+local next = G.next
 local pcall = G.pcall
 local rawget = G.rawget
 local rawset = G.rawset
@@ -263,10 +264,14 @@ function Adapter.Install(config, LoadLocalModule)
             return 0, nil, "no_local_player"
         end
         if effect.player_only == true then
-            if entity ~= G.ThePlayer then
+            -- A small set of player_only effects is intentionally emitted by
+            -- local HUD widgets (for example WX-78 shield feedback). The
+            -- frontend/focal-point emitter is local-player proof even though
+            -- SoundEmitter:GetEntity() is nil or the focal point, not ThePlayer.
+            if entity ~= G.ThePlayer and not local_context then
                 return 0, nil, "player_only_nonlocal"
             end
-            return 1, 0, nil
+            return 1, entity == G.ThePlayer and 0 or nil, nil
         end
         if entity == G.ThePlayer then
             return 1, 0, nil
@@ -494,11 +499,13 @@ function Adapter.Install(config, LoadLocalModule)
         -- it only collapses virtually simultaneous copies for one entity.
         local cross_key = event .. "|" .. EntityKey(entity)
         local cross_last = state.bridge_recent[cross_key]
-        if cross_last ~= nil and now - cross_last < 0.025 then
+        if cross_last ~= nil
+            and cross_last.source ~= source
+            and now - cross_last.time < 0.20 then
             DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, profile.total, ChannelFor(effect, profile), true, "cross_path_duplicate", source)
             return false
         end
-        state.bridge_recent[cross_key] = now
+        state.bridge_recent[cross_key] = { time = now, source = source }
         local key = dedupe_key or (event .. "|" .. EntityKey(entity) .. "|" .. tostring(name or "oneshot"))
         local last = state.recent[key]
         if last ~= nil and now - last < DedupeWindow(effect, profile) then
@@ -522,9 +529,12 @@ function Adapter.Install(config, LoadLocalModule)
         end
         local entity = GetEntity(emitter)
         local local_context = false
-        if entity == nil and G.TheFrontEnd ~= nil and G.TheFrontEnd.GetSound ~= nil then
+        if G.TheFrontEnd ~= nil and G.TheFrontEnd.GetSound ~= nil then
             local success, frontend_sound = pcall(G.TheFrontEnd.GetSound, G.TheFrontEnd)
             local_context = success and emitter == frontend_sound
+        end
+        if not local_context and G.TheFocalPoint ~= nil then
+            local_context = emitter == G.TheFocalPoint.SoundEmitter
         end
         local profile = Profiles.Get(effect)
         if profile.loop then
@@ -585,9 +595,18 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local original_kill = SoundEmitter.KillSound
+    local loop_channel = G.VIBRATION_BLOOD_OVER or 2
+    local function StopLoopChannelIfIdle()
+        if state.had_loop_output and next(state.loops) == nil then
+            pcall(function() G.TheInputProxy:RemoveVibration(loop_channel) end)
+            state.had_loop_output = false
+        end
+    end
+
     SoundEmitter.KillSound = function(emitter, name, ...)
         local results = Pack(original_kill(emitter, name, ...))
         state.loops[LoopKey(emitter, name)] = nil
+        StopLoopChannelIfIdle()
         return unpack(results, 1, results.n)
     end
 
@@ -600,6 +619,7 @@ function Adapter.Install(config, LoadLocalModule)
                 state.loops[key] = nil
             end
         end
+        StopLoopChannelIfIdle()
         return unpack(results, 1, results.n)
     end
 
@@ -615,7 +635,6 @@ function Adapter.Install(config, LoadLocalModule)
         end
     end
 
-    local loop_channel = G.VIBRATION_BLOOD_OVER or 2
     G.scheduler:ExecutePeriodic(0.085, function()
         local combined = 0
         if OutputAllowed() then
@@ -668,8 +687,8 @@ function Adapter.Install(config, LoadLocalModule)
                 state.debug_recent[key] = nil
             end
         end
-        for key, timestamp in pairs(state.bridge_recent) do
-            if now - timestamp > 2 then
+        for key, value in pairs(state.bridge_recent) do
+            if now - value.time > 2 then
                 state.bridge_recent[key] = nil
             end
         end

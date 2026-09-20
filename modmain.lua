@@ -5,10 +5,6 @@ if G.TheNet ~= nil and G.TheNet:IsDedicated() then
 end
 
 local compatibility = GetModConfigData("compatibility", true)
-if compatibility == false then
-    print("[DST Haptics Compat] compatibility disabled; native TheHaptics left untouched")
-    return
-end
 
 local strength_value = GetModConfigData("strength", true)
 local function ConfigNumber(name, fallback)
@@ -18,7 +14,7 @@ end
 
 local config =
 {
-    compatibility = true,
+    compatibility = compatibility ~= false,
     language = GetModConfigData("language", true) or "zh",
     -- DST's restricted mod environment does not expose Lua's tonumber.
     strength = type(strength_value) == "number" and strength_value or 1,
@@ -71,7 +67,7 @@ local ok, message = G.pcall(function()
     local Adapter = LoadLocalModule("scripts/haptic_adapter.lua")
     local api = Adapter.Install(config, LoadLocalModule)
     local ClientActionBridge = LoadLocalModule("scripts/client_action_bridge.lua")
-    ClientActionBridge.Install(api, config)
+    ClientActionBridge.Install(api)
     local RuntimeSettings = LoadLocalModule("scripts/runtime_settings.lua")
     RuntimeSettings.Install(api, config, modname or "dst_haptics_compat", ReadRuntimeConfig)
 end)

@@ -1,0 +1,351 @@
+{
+  "chop_tree": {
+    "files": [
+      "chop_tree_1.wav",
+      "chop_tree_2.wav",
+      "chop_tree_3.wav",
+      "chop_tree_4.wav",
+      "chop_tree_5.wav",
+      "chop_tree_V2_1.wav",
+      "chop_tree_V2_2.wav",
+      "chop_tree_V2_3.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 0.075,
+    "envelope": [
+      1.0,
+      0.05,
+      0.0203
+    ]
+  },
+  "chop_mushroom": {
+    "files": [
+      "chop_mushtree_1.wav",
+      "chop_mushtree_2.wav",
+      "chop_mushtree_3.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 0.2,
+    "envelope": [
+      1.0,
+      0.1638,
+      0.032,
+      0.0105
+    ]
+  },
+  "mine_rock": {
+    "files": [
+      "pickaxe_hitrock_v2.wav",
+      "pickaxe_hitrock_v3.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 0.8,
+    "envelope": [
+      1.0,
+      0.4491,
+      0.2334,
+      0.1371,
+      0.051,
+      0.0168,
+      0.0297,
+      0.017,
+      0.012,
+      0.0032,
+      0.0187,
+      0.0102,
+      0.0034,
+      0.0041,
+      0.0057,
+      0.0013
+    ]
+  },
+  "mine_ice": {
+    "files": [
+      "Mine_IceBoulder_1.wav",
+      "Mine_IceBoulder_2.wav",
+      "Mine_IceBoulder_3.wav",
+      "Mine_IceBoulder_4.wav",
+      "Mine_IceBoulder_5.wav",
+      "Mine_IceBoulder_smash.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 0.65,
+    "envelope": [
+      1.0,
+      0.2913,
+      0.1001,
+      0.0683,
+      0.046,
+      0.062,
+      0.0104,
+      0.0108,
+      0.0127,
+      0.0174,
+      0.0117,
+      0.0127,
+      0.0091,
+      0.0066,
+      0.0042,
+      0.006,
+      0.0021,
+      0.0012,
+      0.0006
+    ]
+  },
+  "mine_moonglass": {
+    "files": [
+      "moonglass_mine_DST-001.wav",
+      "moonglass_mine_DST-007.wav",
+      "moonglass_mine_DST-008.wav",
+      "moonglass_mine_DST-009.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 0.4,
+    "envelope": [
+      1.0,
+      0.1176,
+      0.1609,
+      0.1291,
+      0.0528,
+      0.0252,
+      0.0221,
+      0.0358,
+      0.0459,
+      0.0002
+    ]
+  },
+  "dig": {
+    "files": [
+      "Dig_1.wav",
+      "Dig_2.wav",
+      "Dig_3.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 0.3,
+    "envelope": [
+      0.8867,
+      1.0,
+      0.083,
+      0.0605,
+      0.0439,
+      0.0134
+    ]
+  },
+  "impact_flesh": {
+    "files": [
+      "impact_flesh_dull_1.wav",
+      "impact_flesh_dull_2.wav",
+      "impact_flesh_dull_3.wav",
+      "impact_flesh_dull_4.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 0.425,
+    "envelope": [
+      1.0,
+      0.5115,
+      0.2008,
+      0.1649,
+      0.0906,
+      0.0649,
+      0.0258,
+      0.0143,
+      0.0149
+    ]
+  },
+  "attack_whoosh": {
+    "files": [
+      "attack_whoosh_1.wav",
+      "attack_whoosh_2.wav",
+      "attack_whoosh_3.wav",
+      "attack_whoosh_4.wav",
+      "attack_whoosh_darksword_1.wav",
+      "attack_whoosh_darksword_2.wav",
+      "attack_whoosh_darksword_3.wav",
+      "attack_whoosh_darksword_4.wav",
+      "attack_whoosh_darksword_5.wav",
+      "attack_whoosh_weapon_1.wav",
+      "attack_whoosh_weapon_2.wav",
+      "attack_whoosh_weapon_3.wav",
+      "attack_whoosh_weapon_4.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 0.3,
+    "envelope": [
+      0.1254,
+      0.6412,
+      0.958,
+      0.3952,
+      0.3071,
+      0.0592,
+      0.1795,
+      0.0756,
+      0.1041,
+      0.0931,
+      0.0306,
+      0.0029,
+      0.0069
+    ]
+  },
+  "hungry": {
+    "files": [
+      "Hungry_1.wav",
+      "Hungry_2.wav",
+      "Hungry_3.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 1.35,
+    "envelope": [
+      0.107,
+      0.1667,
+      0.574,
+      0.4108,
+      0.4443,
+      0.5811,
+      0.5617,
+      0.399,
+      0.8295,
+      0.6224,
+      0.501,
+      1.0,
+      0.6013,
+      0.3658,
+      0.4129,
+      0.3069,
+      0.3918,
+      0.2402,
+      0.1193,
+      0.0847,
+      0.0475,
+      0.0354,
+      0.0311,
+      0.0231,
+      0.0187,
+      0.0127,
+      0.017,
+      0.0095,
+      0.0086
+    ]
+  },
+  "freeze": {
+    "files": [
+      "freezeoverlay_1st.wav",
+      "freezeoverlay_2nd.wav",
+      "freezeoverlay_3rd.wav",
+      "freezeoverlay_4th.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 1.55,
+    "envelope": [
+      0.5158,
+      0.8874,
+      0.9521,
+      0.741,
+      0.5884,
+      0.379,
+      0.6092,
+      0.6226,
+      0.7341,
+      0.5372,
+      0.4345,
+      0.4398,
+      0.3466,
+      0.3443,
+      0.2842,
+      0.2778,
+      0.2262,
+      0.2549,
+      0.2332,
+      0.1575,
+      0.1442,
+      0.1166,
+      0.0939,
+      0.1076,
+      0.0636,
+      0.0796,
+      0.0503,
+      0.036,
+      0.0274,
+      0.0238,
+      0.0206,
+      0.0097,
+      0.0103,
+      0.0022
+    ]
+  },
+  "heat": {
+    "files": [
+      "heatwave_level1.wav",
+      "heatwave_level2.wav",
+      "heatwave_level3.wav",
+      "heatwave_level4.wav"
+    ],
+    "bin_seconds": 0.05,
+    "duration_median": 3.075,
+    "envelope": [
+      0.3576,
+      0.5751,
+      0.5933,
+      0.5064,
+      0.7427,
+      0.7373,
+      0.6506,
+      0.6052,
+      0.7374,
+      0.7929,
+      0.8644,
+      0.8277,
+      0.7487,
+      0.8577,
+      0.8211,
+      0.7486,
+      0.8713,
+      0.7447,
+      0.8839,
+      0.7517,
+      0.7703,
+      0.7337,
+      0.6151,
+      0.69,
+      0.6236,
+      0.6141,
+      0.569,
+      0.4479,
+      0.4026,
+      0.4404,
+      0.3432,
+      0.287,
+      0.2366,
+      0.2496,
+      0.2348,
+      0.1879,
+      0.14,
+      0.1071,
+      0.1154,
+      0.0745,
+      0.0785,
+      0.0658,
+      0.0558,
+      0.0539,
+      0.0435,
+      0.0437,
+      0.0404,
+      0.0376,
+      0.0388,
+      0.0359,
+      0.0339,
+      0.0274,
+      0.0248,
+      0.0265,
+      0.0248,
+      0.0199,
+      0.0154,
+      0.011,
+      0.0074,
+      0.0042,
+      0.0017,
+      0.0024,
+      0.0024,
+      0.0004
+    ]
+  }
+}
