@@ -1,11 +1,11 @@
 name = "DST Haptics Compatibility / 手柄震动兼容"
 description = [[
-修复 Windows/XInput 下原版 TheHaptics 无输出的问题。动态读取当前版本 haptics.lua，按原版声音事件、强度、player_only 与 category 产生兼容震动。
+修复 Windows 下原版 TheHaptics 无输出的问题。动态读取当前版本 haptics.lua，并补齐服务器声音在客户端 Lua 层不可见的工作/战斗事件。适配 Xbox/XInput、DS4 与 PS5/DualSense。
 
-Fixes silent native TheHaptics output on Windows/XInput. The current game's haptics.lua remains the source of truth for events, intensity, player_only and category.
+Fixes silent native TheHaptics output on Windows. Uses the current haptics.lua plus replicated action bridges. Supports Xbox/XInput, DS4 and PS5/DualSense through TheInputProxy.
 ]]
 author = "Local compatibility build"
-version = "1.0.0"
+version = "1.1.0"
 
 api_version = 10
 dst_compatible = true

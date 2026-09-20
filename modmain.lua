@@ -31,7 +31,9 @@ end
 
 local ok, message = G.pcall(function()
     local Adapter = LoadLocalModule("scripts/haptic_adapter.lua")
-    Adapter.Install(config, LoadLocalModule)
+    local api = Adapter.Install(config, LoadLocalModule)
+    local ClientActionBridge = LoadLocalModule("scripts/client_action_bridge.lua")
+    ClientActionBridge.Install(api, config)
 end)
 
 if not ok then

@@ -39,7 +39,7 @@ function Adapter.Install(config, LoadLocalModule)
     local existing = rawget(SoundEmitter, "_dst_haptics_compat")
     if existing ~= nil and existing.installed then
         existing.config = config
-        return
+        return existing.api
     end
 
     local Profiles = LoadLocalModule("scripts/haptic_profiles.lua")
@@ -61,9 +61,13 @@ function Adapter.Install(config, LoadLocalModule)
         recent = {},
         loops = {},
         debug_recent = {},
+        bridge_recent = {},
         native_suppressed = false,
         had_loop_output = false,
         last_controller_id = nil,
+        last_controller_type = nil,
+        last_controller_name = nil,
+        generation = 0,
     }
     rawset(SoundEmitter, "_dst_haptics_compat", state)
 
@@ -93,7 +97,7 @@ function Adapter.Install(config, LoadLocalModule)
         unique_count = unique_count + 1
     end
 
-    local function DebugLog(effect, entity, distance, raw_intensity, final_intensity, duration, channel, filtered, reason)
+    local function DebugLog(effect, entity, distance, raw_intensity, final_intensity, duration, channel, filtered, reason, source)
         if not state.config.debug then
             return
         end
@@ -106,9 +110,10 @@ function Adapter.Install(config, LoadLocalModule)
         end
         state.debug_recent[key] = now
         print(string.format(
-            "[DST Haptics Compat] event=%s category=%s entity=%s distance=%s raw=%.3f final=%.3f duration=%.3f channel=%s filtered=%s reason=%s",
+            "[DST Haptics Compat] event=%s category=%s source=%s entity=%s distance=%s raw=%.3f final=%.3f duration=%.3f channel=%s filtered=%s reason=%s",
             effect.event,
             tostring(effect.category or "UNSPECIFIED"),
+            tostring(source or "sound"),
             tostring(identity),
             distance ~= nil and string.format("%.2f", distance) or "n/a",
             raw_intensity or 0,
@@ -134,18 +139,69 @@ function Adapter.Install(config, LoadLocalModule)
         return success and paused == true
     end
 
+    local CONTROLLER_TYPE_NAMES =
+    {
+        [1] = "Xbox/XInput",
+        [2] = "DualShock 4",
+        [4] = "Generic controller",
+        [6] = "Steam Controller/Steam Input",
+        [7] = "PS5 controller",
+        [9] = "Switch controller",
+        [10] = "Steam Deck",
+        [11] = "DualSense",
+        [12] = "Joy-Con L",
+        [13] = "Joy-Con R",
+    }
+
+    local function IsUsableController(id)
+        return type(id) == "number"
+            and id > 0
+            and G.TheInputProxy:IsInputDeviceConnected(id)
+            and G.TheInputProxy:IsInputDeviceEnabled(id)
+            and G.TheInputProxy:GetInputDeviceType(id) ~= 0
+    end
+
     local function GetControllerID()
         if G.TheInput == nil or G.TheInput.ControllerAttached == nil or not G.TheInput:ControllerAttached() then
             return nil
         end
         local id = G.TheInput:GetControllerID()
-        if type(id) ~= "number" or id <= 0 then
-            return nil
+        if IsUsableController(id) then
+            return id
         end
-        if not G.TheInputProxy:IsInputDeviceConnected(id) or not G.TheInputProxy:IsInputDeviceEnabled(id) then
-            return nil
+
+        -- Hot-plug and Steam Input can briefly report device 0 as last active.
+        -- Scan only while DST says a controller is active, never merely because
+        -- a keyboard/mouse device exists.
+        local count = G.TheInputProxy:GetInputDeviceCount()
+        for candidate = 1, count - 1 do
+            if IsUsableController(candidate) then
+                return candidate
+            end
         end
-        return id
+        return nil
+    end
+
+    local function RefreshControllerOutput(id)
+        if state.last_controller_id == id then
+            return
+        end
+        state.last_controller_id = id
+        state.last_controller_type = G.TheInputProxy:GetInputDeviceType(id)
+        local success, name = pcall(G.TheInputProxy.GetInputDeviceName, G.TheInputProxy, id)
+        state.last_controller_name = success and name or CONTROLLER_TYPE_NAMES[state.last_controller_type] or "controller"
+        -- Profile normally owns this flag. Reapplying it on a newly active
+        -- controller repairs hot-plug without selecting an engine-specific API.
+        G.TheInputProxy:EnableVibration(true)
+        if state.config.debug then
+            print(string.format(
+                "[DST Haptics Compat] controller id=%d type=%d family=%s name=%s output=TheInputProxy",
+                id,
+                state.last_controller_type,
+                tostring(CONTROLLER_TYPE_NAMES[state.last_controller_type] or "controller"),
+                tostring(state.last_controller_name)
+            ))
+        end
     end
 
     local function OutputAllowed()
@@ -156,7 +212,7 @@ function Adapter.Install(config, LoadLocalModule)
         if id == nil then
             return false
         end
-        state.last_controller_id = id
+        RefreshControllerOutput(id)
         return true
     end
 
@@ -192,7 +248,7 @@ function Adapter.Install(config, LoadLocalModule)
         return effect.category == "UI" or string.find(string.lower(effect.event), "/hud/", 1, true) ~= nil
     end
 
-    local function SpatialFactor(effect, entity)
+    local function SpatialFactor(effect, entity, local_context)
         if IsUIEffect(effect) then
             return 1, nil, nil
         end
@@ -207,6 +263,11 @@ function Adapter.Install(config, LoadLocalModule)
         end
         if entity == G.ThePlayer then
             return 1, 0, nil
+        end
+        -- Freeze/overheat and similar HUD danger events are played through the
+        -- frontend SoundEmitter, which intentionally has no world entity.
+        if entity == nil and local_context and effect.category == "DANGER" then
+            return 1, nil, nil
         end
         if entity == nil or entity.Transform == nil then
             return 0, nil, "no_spatial_entity"
@@ -267,12 +328,15 @@ function Adapter.Install(config, LoadLocalModule)
         G.TheInputProxy:AddVibration(channel, duration, Clamp(magnitude, 0, 1), false)
     end
 
-    local function ScheduleProfile(effect, entity, profile, volume, spatial, distance)
+    local function ScheduleProfile(effect, entity, profile, volume, spatial, distance, source)
         local raw = NumberOr(effect.vibration_intensity, 1)
-        local base = MapIntensity(raw) * Clamp(NumberOr(state.config.strength, 1), 0, 2)
+        local base = MapIntensity(raw)
+            * Clamp(NumberOr(state.config.strength, 1), 0, 2)
+            * NumberOr(profile.factor, 1)
         base = base * Clamp(NumberOr(volume, 1), 0, 1) * spatial
         local channel = ChannelFor(effect, profile)
         local strongest = 0
+        local generation = state.generation
         for i = 1, #profile.pulses do
             local pulse = profile.pulses[i]
             local magnitude = Clamp(base * pulse[3], 0, 1)
@@ -281,22 +345,24 @@ function Adapter.Install(config, LoadLocalModule)
                 AddPulse(channel, pulse[2], magnitude)
             else
                 G.scheduler:ExecuteInTime(pulse[1], function()
-                    AddPulse(channel, pulse[2], magnitude)
+                    if generation == state.generation then
+                        AddPulse(channel, pulse[2], magnitude)
+                    end
                 end)
             end
         end
-        DebugLog(effect, entity, distance, raw, strongest, profile.total, channel, false, "accepted")
+        DebugLog(effect, entity, distance, raw, strongest, profile.total, channel, false, "accepted", source)
     end
 
     local function LoopKey(emitter, name)
         return tostring(emitter) .. "|" .. tostring(name)
     end
 
-    local function RegisterLoop(effect, emitter, entity, name, volume, profile, distance)
+    local function RegisterLoop(effect, emitter, entity, name, volume, profile, distance, source, local_context)
         if name == nil then
             local bounded = { pulses = { { 0, 0.10, 0.70 }, { 0.09, 0.10, 0.55 }, { 0.18, 0.08, 0.40 } }, total = 0.26 }
-            local spatial = SpatialFactor(effect, entity)
-            ScheduleProfile(effect, entity, bounded, volume, spatial, distance)
+            local spatial = SpatialFactor(effect, entity, local_context)
+            ScheduleProfile(effect, entity, bounded, volume, spatial, distance, source)
             return
         end
         state.loops[LoopKey(emitter, name)] =
@@ -307,8 +373,60 @@ function Adapter.Install(config, LoadLocalModule)
             effect = effect,
             volume = NumberOr(volume, 1),
             profile = profile,
+            local_context = local_context,
         }
-        DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, -1, ChannelFor(effect, profile), false, "loop_started")
+        DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, -1, ChannelFor(effect, profile), false, "loop_started", source)
+    end
+
+    local function HandleEvent(event, entity, name, volume, source, dedupe_key, local_context)
+        local effect = state.effects[event]
+        if effect == nil then
+            return false
+        end
+        if effect.vibration ~= true then
+            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 0), 0, 0, "n/a", true, "vibration_disabled_in_native_table", source)
+            return false
+        end
+        if not ProfileAllowsVibration() then
+            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "profile_vibration_off", source)
+            return false
+        end
+        if GetControllerID() == nil then
+            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "no_active_controller", source)
+            return false
+        end
+        local spatial, distance, reason = SpatialFactor(effect, entity, local_context)
+        if spatial <= 0 then
+            DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, reason or "spatially_filtered", source)
+            return false
+        end
+
+        local profile = Profiles.Get(effect)
+        local now = Now()
+        -- Sound hooks and replicated-action bridges can observe the same native
+        -- event through different Lua paths. Keep this key deliberately small:
+        -- it only collapses virtually simultaneous copies for one entity.
+        local cross_key = event .. "|" .. EntityKey(entity)
+        local cross_last = state.bridge_recent[cross_key]
+        if cross_last ~= nil and now - cross_last < 0.025 then
+            DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, profile.total, ChannelFor(effect, profile), true, "cross_path_duplicate", source)
+            return false
+        end
+        state.bridge_recent[cross_key] = now
+        local key = dedupe_key or (event .. "|" .. EntityKey(entity) .. "|" .. tostring(name or "oneshot"))
+        local last = state.recent[key]
+        if last ~= nil and now - last < DedupeWindow(effect, profile) then
+            DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, profile.total, ChannelFor(effect, profile), true, "deduplicated", source)
+            return false
+        end
+        state.recent[key] = now
+
+        if profile.loop then
+            return false
+        else
+            ScheduleProfile(effect, entity, profile, volume, spatial, distance, source)
+        end
+        return true
     end
 
     local function HandleSound(emitter, event, name, volume)
@@ -317,39 +435,23 @@ function Adapter.Install(config, LoadLocalModule)
             return
         end
         local entity = GetEntity(emitter)
-        if effect.vibration ~= true then
-            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 0), 0, 0, "n/a", true, "vibration_disabled_in_native_table")
-            return
+        local local_context = false
+        if entity == nil and G.TheFrontEnd ~= nil and G.TheFrontEnd.GetSound ~= nil then
+            local success, frontend_sound = pcall(G.TheFrontEnd.GetSound, G.TheFrontEnd)
+            local_context = success and emitter == frontend_sound
         end
-        if not ProfileAllowsVibration() then
-            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "profile_vibration_off")
-            return
-        end
-        if GetControllerID() == nil then
-            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "no_active_controller")
-            return
-        end
-        local spatial, distance, reason = SpatialFactor(effect, entity)
-        if spatial <= 0 then
-            DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, reason or "spatially_filtered")
-            return
-        end
-
         local profile = Profiles.Get(effect)
-        local now = Now()
-        local key = event .. "|" .. EntityKey(entity) .. "|" .. tostring(name or "oneshot")
-        local last = state.recent[key]
-        if last ~= nil and now - last < DedupeWindow(effect, profile) then
-            DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, profile.total, ChannelFor(effect, profile), true, "deduplicated")
+        if profile.loop then
+            if not ProfileAllowsVibration() or GetControllerID() == nil then
+                return
+            end
+            local spatial, distance = SpatialFactor(effect, entity, local_context)
+            if spatial > 0 then
+                RegisterLoop(effect, emitter, entity, name, volume, profile, distance, "sound", local_context)
+            end
             return
         end
-        state.recent[key] = now
-
-        if profile.loop then
-            RegisterLoop(effect, emitter, entity, name, volume, profile, distance)
-        else
-            ScheduleProfile(effect, entity, profile, volume, spatial, distance)
-        end
+        HandleEvent(event, entity, name, volume, "sound", nil, local_context)
     end
 
     local function SafeHandle(...)
@@ -361,6 +463,23 @@ function Adapter.Install(config, LoadLocalModule)
                 print("[DST Haptics Compat] " .. L(state.config.language, "hook_failed", tostring(message)))
             end
         end
+    end
+
+    local function BridgeEmit(event, entity, context)
+        context = context or {}
+        local key = context.dedupe_key
+        if key == nil and context.semantic_key ~= nil then
+            key = "bridge|" .. tostring(context.semantic_key)
+        end
+        return HandleEvent(
+            event,
+            entity,
+            context.name,
+            context.volume,
+            context.source or "bridge",
+            key,
+            context.local_context == true
+        )
     end
 
     local original_play = SoundEmitter.PlaySound
@@ -426,7 +545,7 @@ function Adapter.Install(config, LoadLocalModule)
                 if not valid then
                     state.loops[key] = nil
                 else
-                    local spatial = SpatialFactor(loop.effect, loop.entity)
+                    local spatial = SpatialFactor(loop.effect, loop.entity, loop.local_context)
                     local raw = NumberOr(loop.effect.vibration_intensity, 1)
                     local magnitude = MapIntensity(raw)
                         * Clamp(NumberOr(state.config.strength, 1), 0, 2)
@@ -462,6 +581,11 @@ function Adapter.Install(config, LoadLocalModule)
                 state.debug_recent[key] = nil
             end
         end
+        for key, timestamp in pairs(state.bridge_recent) do
+            if now - timestamp > 2 then
+                state.bridge_recent[key] = nil
+            end
+        end
     end)
 
 
@@ -471,13 +595,23 @@ function Adapter.Install(config, LoadLocalModule)
         inst:ListenForEvent("onremove", function()
             state.loops = {}
             state.recent = {}
+            state.bridge_recent = {}
+            state.generation = state.generation + 1
             state.had_loop_output = false
             pcall(function() G.TheInputProxy:StopVibration() end)
         end)
     end)
 
+    state.api =
+    {
+        Emit = BridgeEmit,
+        GetEffect = function(event) return state.effects[event] end,
+        GetState = function() return state end,
+    }
+
     SuppressNative()
     print("[DST Haptics Compat] " .. L(config.language, "initialized", unique_count, state.definitions, state.duplicate_events))
+    return state.api
 end
 
 return Adapter

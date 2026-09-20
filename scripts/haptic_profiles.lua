@@ -40,6 +40,57 @@ function M.Get(effect)
         return { pulses = { { 0, 0.060, 0.72 } }, total = 0.060 }
     end
 
+    -- These families are backed by the shipped 882 Hz vibration WAV assets.
+    -- AddVibration cannot play those samples, so the pulse envelopes preserve
+    -- their measured duration/decay and relative character instead.
+    if Any(event, { "use_axe_tree", "use_axe_mushroom", "beaver_chop_tree", "rock_tree/chop" }) then
+        return { pulses = { { 0, 0.055, 1.00 }, { 0.045, 0.045, 0.28 } }, factor = 0.82, total = 0.09 }
+    end
+
+    if Any(event, { "use_pick_rock", "iceboulder_hit", "moon_glass/mine" }) then
+        return
+        {
+            pulses =
+            {
+                { 0, 0.045, 1.00 },
+                { 0.04, 0.045, 0.68 },
+                { 0.08, 0.050, 0.39 },
+                { 0.125, 0.055, 0.20 },
+                { 0.175, 0.060, 0.09 },
+            },
+            factor = 0.96,
+            total = 0.235,
+        }
+    end
+
+    if Contains(event, "/dig") then
+        return { pulses = { { 0.025, 0.050, 1.00 }, { 0.07, 0.045, 0.16 } }, factor = 0.68, total = 0.115 }
+    end
+
+    if Contains(event, "/impacts/impact_") then
+        local size_factor = Contains(event, "_lrg_") and 1.00
+            or Contains(event, "_sml_") and 0.58
+            or Contains(event, "_med_") and 0.78
+            or Contains(event, "_wet_") and 0.72
+            or 0.90
+        local material_factor = Contains(event, "_sharp") and 1.00 or 0.88
+        return
+        {
+            pulses = { { 0, 0.050, 1.00 }, { 0.045, 0.055, 0.54 }, { 0.095, 0.060, 0.16 } },
+            factor = size_factor * material_factor,
+            total = 0.155,
+        }
+    end
+
+    if Any(event, { "attack_whoosh", "attack_weapon", "/swing", "_swing" }) then
+        return
+        {
+            pulses = { { 0.030, 0.050, 0.42 }, { 0.070, 0.060, 1.00 }, { 0.125, 0.055, 0.36 } },
+            factor = Contains(event, "attack_weapon") and 0.68 or 0.52,
+            total = 0.18,
+        }
+    end
+
     if Any(event, { "roar", "taunt", "scream", "supernova", "finale" }) then
         return { pulses = { { 0, 0.13, 0.75 }, { 0.12, 0.18, 1.00 }, { 0.29, 0.12, 0.55 } }, total = 0.41 }
     end
@@ -57,7 +108,7 @@ function M.Get(effect)
     end
 
     if Any(event, { "whoosh", "swing", "attack_weapon", "attack_", "/attack" }) then
-        return { pulses = { { 0, 0.11, 0.70 }, { 0.095, 0.055, 0.32 } }, total = 0.15 }
+        return { pulses = { { 0, 0.10, 0.70 }, { 0.09, 0.055, 0.32 } }, factor = 0.58, total = 0.145 }
     end
 
     if category == "BOSS" then
