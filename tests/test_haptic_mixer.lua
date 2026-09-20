@@ -1,0 +1,13 @@
+local root = os.getenv("DST_HAPTICS_MOD_ROOT") or "."
+local Mixer = dofile(root .. "/scripts/haptic_mixer.lua")
+assert(#Mixer.Build({}) == 0)
+assert(#Mixer.Build({ { duration = 0, magnitude = 1 } }) == 0)
+local result = Mixer.Build({ { duration = 0.02, magnitude = 0.8 }, { duration = 0.2, magnitude = 0.2 } })
+assert(#result == 2)
+assert(result[1].delay == 0 and result[1].duration == 0.02 and result[1].magnitude == 0.8)
+assert(result[2].delay == 0.02 and math.abs(result[2].duration - 0.18) < 1e-9 and result[2].magnitude == 0.2)
+result = Mixer.Build({ { duration = 0.2, magnitude = 0.8 }, { duration = 0.02, magnitude = 0.2 } })
+assert(#result == 1 and result[1].duration == 0.2 and result[1].magnitude == 0.8)
+result = Mixer.Build({ { duration = 0.1, magnitude = 0.5 }, { duration = 0.1, magnitude = 0.5 } })
+assert(#result == 1 and result[1].duration == 0.1)
+print("loop mixer tests passed: independent lifetimes and max-envelope levels")

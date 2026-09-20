@@ -45,6 +45,7 @@ function Adapter.Install(config, LoadLocalModule)
 
     local Profiles = LoadLocalModule("scripts/haptic_profiles.lua")
     local Parameters = LoadLocalModule("scripts/haptic_parameters.lua")
+    local Mixer = LoadLocalModule("scripts/haptic_mixer.lua")
     local L = LoadLocalModule("scripts/localization.lua")
 
     local ok, native_effects = pcall(G.require, "haptics")
@@ -71,6 +72,7 @@ function Adapter.Install(config, LoadLocalModule)
         last_controller_type = nil,
         last_controller_name = nil,
         generation = 0,
+        loop_revision = 0,
         listener_position = nil,
         last_special_hurt_time = nil,
         metrics =
@@ -690,10 +692,15 @@ function Adapter.Install(config, LoadLocalModule)
 
     local original_kill = SoundEmitter.KillSound
     local loop_channel = G.VIBRATION_BLOOD_OVER or 2
+    local RefreshLoops
     local function StopLoopChannelIfIdle()
-        if state.had_loop_output and next(state.loops) == nil then
+        state.loop_revision = state.loop_revision + 1
+        if state.had_loop_output then
             pcall(function() G.TheInputProxy:RemoveVibration(loop_channel) end)
             state.had_loop_output = false
+        end
+        if next(state.loops) ~= nil and RefreshLoops ~= nil then
+            RefreshLoops()
         end
     end
 
@@ -724,6 +731,7 @@ function Adapter.Install(config, LoadLocalModule)
             local loop = state.loops[LoopKey(emitter, name)]
             if loop ~= nil then
                 loop.volume = NumberOr(volume, loop.volume)
+                StopLoopChannelIfIdle()
             end
             return unpack(results, 1, results.n)
         end
@@ -737,6 +745,7 @@ function Adapter.Install(config, LoadLocalModule)
             if loop ~= nil and type(parameter) == "string" and type(value) == "number" then
                 loop.params[parameter] = value
                 state.metrics.parameter_updates = state.metrics.parameter_updates + 1
+                StopLoopChannelIfIdle()
             end
             return unpack(results, 1, results.n)
         end
@@ -750,8 +759,10 @@ function Adapter.Install(config, LoadLocalModule)
         end
     end
 
-    G.scheduler:ExecutePeriodic(0.085, function()
-        local combined = 0
+    RefreshLoops = function()
+        state.loop_revision = state.loop_revision + 1
+        local revision, generation = state.loop_revision, state.generation
+        local contributions = {}
         if OutputAllowed() then
             for key, loop in pairs(state.loops) do
                 local valid = loop.emitter ~= nil
@@ -766,28 +777,47 @@ function Adapter.Install(config, LoadLocalModule)
                     state.loops[key] = nil
                 else
                     local spatial = SpatialFactor(loop.effect, loop.entity, loop.local_context)
-                    local raw = NumberOr(loop.effect.vibration_intensity, 1)
-                    local parameter_scale = Parameters.GetScale(loop.effect.event, loop.params)
-                    local magnitude = MapIntensity(raw)
+                    local magnitude = MapIntensity(NumberOr(loop.effect.vibration_intensity, 1))
                         * Clamp(NumberOr(state.config.strength, 1), 0, 2)
                         * EffectScale(loop.effect, loop.profile)
                         * Clamp(loop.volume or 1, 0, 1)
                         * spatial
                         * loop.profile.factor
-                        * parameter_scale
-                    combined = math.max(combined, magnitude)
+                        * Parameters.GetScale(loop.effect.event, loop.params)
+                    local duration_scale = Clamp(NumberOr(state.config.duration, 1), 0, 2)
+                        * EffectScale(loop.effect, loop.profile, "_duration")
+                    if magnitude > 0 and duration_scale > 0 then
+                        local duration, calibrated = CalibratePulse(loop.profile.duration, magnitude, duration_scale)
+                        contributions[#contributions + 1] = { duration = duration, magnitude = calibrated }
+                    end
                 end
             end
         end
-
-        if combined > 0.01 then
-            AddPulse(loop_channel, 0.10, Clamp(combined, 0, 1))
-            state.had_loop_output = true
-        elseif state.had_loop_output then
+        local segments = Mixer.Build(contributions)
+        if state.had_loop_output then
             pcall(function() G.TheInputProxy:RemoveVibration(loop_channel) end)
             state.had_loop_output = false
         end
-    end)
+        for i = 1, #segments do
+            local segment = segments[i]
+            local function EmitSegment()
+                if revision == state.loop_revision and generation == state.generation and OutputAllowed() then
+                    SuppressNative()
+                    G.TheInputProxy:AddVibration(loop_channel, segment.duration, segment.magnitude, false)
+                    state.had_loop_output = true
+                    state.metrics.pulses = state.metrics.pulses + 1
+                end
+            end
+            if segment.delay == 0 then
+                EmitSegment()
+            elseif segment.delay < 0.085 then
+                -- The next periodic sample replaces later segments. Never leave
+                -- callbacks queued beyond that sample merely to invalidate them.
+                G.scheduler:ExecuteInTime(segment.delay, EmitSegment)
+            end
+        end
+    end
+    G.scheduler:ExecutePeriodic(0.085, RefreshLoops)
 
     G.scheduler:ExecutePeriodic(0.5, SuppressNative)
 
@@ -865,6 +895,11 @@ function Adapter.Install(config, LoadLocalModule)
             return true
         end,
         ApplyConfig = function(values)
+            -- A settings change invalidates old envelope tails immediately.
+            state.generation = state.generation + 1
+            state.loop_revision = state.loop_revision + 1
+            pcall(function() G.TheInputProxy:StopVibration() end)
+            state.had_loop_output = false
             if type(values) == "table" then
                 for key, value in pairs(values) do
                     state.config[key] = value

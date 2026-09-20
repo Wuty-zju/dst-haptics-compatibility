@@ -353,9 +353,27 @@ before = #vibrations
 periodic[1].fn()
 assert(#vibrations == before, "zero loop parameter still produced vibration")
 SoundEmitter.SetParameter(crab_emitter, "crabmagic", "intensity", 1)
+assert(#vibrations == before + 1, "live loop parameter did not restore vibration immediately")
 periodic[1].fn()
-assert(#vibrations == before + 1, "live loop parameter did not restore vibration")
+assert(#vibrations == before + 2, "live loop parameter did not persist")
 SoundEmitter.KillSound(crab_emitter, "crabmagic")
+
+-- Loop pulse width follows both the native category and loop duration axes.
+api.ApplyConfig({ controller_profile = "xbox", duration = 1, loop_duration = 0.5, environment_duration = 1 })
+now = now + 1
+SoundEmitter.PlaySound(loop_emitter, "test/loop_LP", "beam", 1)
+periodic[1].fn()
+assert(math.abs(vibrations[#vibrations].duration - 0.05) < 1e-9, "loop width ignored 50%")
+api.ApplyConfig({ loop_duration = 0 })
+before = #vibrations
+periodic[1].fn()
+assert(#vibrations == before, "zero loop duration produced output")
+api.ApplyConfig({ loop_duration = 2 })
+periodic[1].fn()
+assert(math.abs(vibrations[#vibrations].duration - 0.2) < 1e-9, "loop width ignored 200%")
+SoundEmitter.KillSound(loop_emitter, "beam")
+RunDelayed()
+api.ApplyConfig({ loop_duration = 1 })
 
 -- User duration scales the complete envelope after device response. In
 -- particular DS4/DS5 minimum pulse widths must not erase the 5% setting.
