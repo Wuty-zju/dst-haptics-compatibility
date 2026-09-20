@@ -183,11 +183,12 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local function RefreshControllerOutput(id)
-        if state.last_controller_id == id then
+        local current_type = G.TheInputProxy:GetInputDeviceType(id)
+        if state.last_controller_id == id and state.last_controller_type == current_type then
             return
         end
         state.last_controller_id = id
-        state.last_controller_type = G.TheInputProxy:GetInputDeviceType(id)
+        state.last_controller_type = current_type
         local success, name = pcall(G.TheInputProxy.GetInputDeviceName, G.TheInputProxy, id)
         state.last_controller_name = success and name or CONTROLLER_TYPE_NAMES[state.last_controller_type] or "controller"
         -- Profile normally owns this flag. Reapplying it on a newly active
@@ -205,7 +206,7 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local function OutputAllowed()
-        if not ProfileAllowsVibration() or IsPaused() then
+        if state.config.compatibility == false or not ProfileAllowsVibration() or IsPaused() then
             return false
         end
         local id = GetControllerID()
@@ -217,13 +218,19 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local function SuppressNative()
-        if G.TheHaptics ~= nil and G.TheHaptics.EnableVibration ~= nil then
+        if G.TheHaptics ~= nil and G.TheHaptics.EnableVibration ~= nil and state.config.compatibility ~= false then
             pcall(function() G.TheHaptics:EnableVibration(false) end)
             if not state.native_suppressed then
                 state.native_suppressed = true
                 if state.config.debug then
                     print("[DST Haptics Compat] " .. L(state.config.language, "native_suppressed"))
                 end
+            end
+        elseif state.native_suppressed then
+            state.native_suppressed = false
+            pcall(function() G.TheInputProxy:StopVibration() end)
+            if G.TheHaptics ~= nil and G.TheHaptics.EnableVibration ~= nil then
+                pcall(function() G.TheHaptics:EnableVibration(ProfileAllowsVibration()) end)
             end
         end
     end
@@ -278,12 +285,14 @@ function Adapter.Install(config, LoadLocalModule)
         local dx, dz = ex - px, ez - pz
         local distance = math.sqrt(dx * dx + dz * dz)
         local policy = DISTANCE_POLICY[effect.category] or DISTANCE_POLICY.PLAYER
+        local spatial_scale = Clamp(NumberOr(state.config.spatial_scale, 1), 0.5, 2)
+        local far = policy.near + (policy.far - policy.near) * spatial_scale
         if distance <= policy.near then
             return 1, distance, nil
-        elseif distance >= policy.far then
+        elseif distance >= far then
             return 0, distance, "outside_spatial_range"
         end
-        local t = (distance - policy.near) / (policy.far - policy.near)
+        local t = (distance - policy.near) / (far - policy.near)
         -- Cubic smoothstep avoids a hard audible edge while reaching exact zero.
         local smooth = t * t * (3 - 2 * t)
         return 1 - smooth, distance, nil
@@ -320,12 +329,80 @@ function Adapter.Install(config, LoadLocalModule)
         return G.VIBRATION_CAMERA_SHAKE or 0
     end
 
+    local CONTROLLER_CALIBRATION =
+    {
+        xbox = { gain = 1.00, gamma = 1.00, time = 1.00, minimum_duration = 0.025 },
+        ds4 = { gain = 0.97, gamma = 0.95, time = 1.08, minimum_duration = 0.040 },
+        ds5 = { gain = 0.92, gamma = 0.90, time = 1.12, minimum_duration = 0.045 },
+    }
+
+    local RESPONSE_CALIBRATION =
+    {
+        detail = { gain = 1.00, time = 1.00 },
+        soft = { gain = 0.72, time = 0.90 },
+        punchy = { gain = 1.15, time = 1.12 },
+    }
+
+    local function GetControllerFamily()
+        local forced = state.config.controller_profile
+        if forced == "xbox" or forced == "ds4" or forced == "ds5" then
+            return forced
+        end
+        if state.last_controller_type == 2 then
+            return "ds4"
+        elseif state.last_controller_type == 7 or state.last_controller_type == 11 then
+            return "ds5"
+        end
+        -- Steam Input and generic devices normally expose legacy XInput-style
+        -- rumble to the game; users can override this in the in-world menu.
+        return "xbox"
+    end
+
+    local function GetOutputCalibration()
+        local hardware = CONTROLLER_CALIBRATION[GetControllerFamily()] or CONTROLLER_CALIBRATION.xbox
+        local response = RESPONSE_CALIBRATION[state.config.response_mode] or RESPONSE_CALIBRATION.detail
+        return hardware, response
+    end
+
+    local function CalibratePulse(duration, magnitude)
+        local hardware, response = GetOutputCalibration()
+        local calibrated_duration = math.max(hardware.minimum_duration, duration * hardware.time * response.time)
+        local calibrated_magnitude = (Clamp(magnitude, 0, 1) ^ hardware.gamma) * hardware.gain * response.gain
+        return calibrated_duration, Clamp(calibrated_magnitude, 0, 1)
+    end
+
+    local function EffectScale(effect, profile)
+        local kind = profile.kind
+        local scale
+        if kind == "tool" then
+            scale = state.config.tool_scale
+        elseif kind == "combat" then
+            scale = state.config.combat_scale
+        elseif effect.category == "DANGER" then
+            scale = state.config.danger_scale
+        elseif effect.category == "BOSS" then
+            scale = state.config.boss_scale
+        elseif effect.category == "ENVIRONMENT" then
+            scale = state.config.environment_scale
+        elseif IsUIEffect(effect) then
+            scale = state.config.ui_scale
+        else
+            scale = state.config.player_scale
+        end
+        local result = Clamp(NumberOr(scale, 1), 0, 2)
+        if profile.loop then
+            result = result * Clamp(NumberOr(state.config.loop_scale, 1), 0, 2)
+        end
+        return result
+    end
+
     local function AddPulse(channel, duration, magnitude)
         if magnitude <= 0 or duration <= 0 or not OutputAllowed() then
             return
         end
+        duration, magnitude = CalibratePulse(duration, magnitude)
         SuppressNative()
-        G.TheInputProxy:AddVibration(channel, duration, Clamp(magnitude, 0, 1), false)
+        G.TheInputProxy:AddVibration(channel, duration, magnitude, false)
     end
 
     local function ScheduleProfile(effect, entity, profile, volume, spatial, distance, source)
@@ -333,18 +410,22 @@ function Adapter.Install(config, LoadLocalModule)
         local base = MapIntensity(raw)
             * Clamp(NumberOr(state.config.strength, 1), 0, 2)
             * NumberOr(profile.factor, 1)
+            * EffectScale(effect, profile)
         base = base * Clamp(NumberOr(volume, 1), 0, 1) * spatial
         local channel = ChannelFor(effect, profile)
         local strongest = 0
         local generation = state.generation
+        local hardware, response = GetOutputCalibration()
+        local time_scale = hardware.time * response.time
         for i = 1, #profile.pulses do
             local pulse = profile.pulses[i]
             local magnitude = Clamp(base * pulse[3], 0, 1)
-            strongest = math.max(strongest, magnitude)
+            local _, calibrated = CalibratePulse(pulse[2], magnitude)
+            strongest = math.max(strongest, calibrated)
             if pulse[1] <= 0 then
                 AddPulse(channel, pulse[2], magnitude)
             else
-                G.scheduler:ExecuteInTime(pulse[1], function()
+                G.scheduler:ExecuteInTime(pulse[1] * time_scale, function()
                     if generation == state.generation then
                         AddPulse(channel, pulse[2], magnitude)
                     end
@@ -383,6 +464,9 @@ function Adapter.Install(config, LoadLocalModule)
         if effect == nil then
             return false
         end
+        if state.config.compatibility == false then
+            return false
+        end
         if effect.vibration ~= true then
             DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 0), 0, 0, "n/a", true, "vibration_disabled_in_native_table", source)
             return false
@@ -391,10 +475,12 @@ function Adapter.Install(config, LoadLocalModule)
             DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "profile_vibration_off", source)
             return false
         end
-        if GetControllerID() == nil then
+        local controller_id = GetControllerID()
+        if controller_id == nil then
             DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "no_active_controller", source)
             return false
         end
+        RefreshControllerOutput(controller_id)
         local spatial, distance, reason = SpatialFactor(effect, entity, local_context)
         if spatial <= 0 then
             DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, reason or "spatially_filtered", source)
@@ -549,6 +635,7 @@ function Adapter.Install(config, LoadLocalModule)
                     local raw = NumberOr(loop.effect.vibration_intensity, 1)
                     local magnitude = MapIntensity(raw)
                         * Clamp(NumberOr(state.config.strength, 1), 0, 2)
+                        * EffectScale(loop.effect, loop.profile)
                         * Clamp(loop.volume or 1, 0, 1)
                         * spatial
                         * loop.profile.factor
@@ -558,7 +645,7 @@ function Adapter.Install(config, LoadLocalModule)
         end
 
         if combined > 0.01 then
-            G.TheInputProxy:AddVibration(loop_channel, 0.10, Clamp(combined, 0, 1), false)
+            AddPulse(loop_channel, 0.10, Clamp(combined, 0, 1))
             state.had_loop_output = true
         elseif state.had_loop_output then
             pcall(function() G.TheInputProxy:RemoveVibration(loop_channel) end)
@@ -607,6 +694,22 @@ function Adapter.Install(config, LoadLocalModule)
         Emit = BridgeEmit,
         GetEffect = function(event) return state.effects[event] end,
         GetState = function() return state end,
+        ApplyConfig = function(values)
+            if type(values) == "table" then
+                for key, value in pairs(values) do
+                    state.config[key] = value
+                end
+            end
+            if state.config.compatibility == false then
+                state.loops = {}
+                state.recent = {}
+                state.bridge_recent = {}
+                state.generation = state.generation + 1
+                state.had_loop_output = false
+                pcall(function() G.TheInputProxy:StopVibration() end)
+            end
+            SuppressNative()
+        end,
     }
 
     SuppressNative()

@@ -1,6 +1,6 @@
 # DST Haptics Compatibility / 饥荒联机版手柄震动兼容
 
-版本 1.1.0，纯客户端 Mod。
+版本 1.2.0，纯客户端 Mod。
 
 ## 中文
 
@@ -36,6 +36,8 @@ Mod 不调用 Xbox 专属 DLL，而是使用 DST 自己的活动设备与 `TheIn
 
 这些类型都会通过同一套事件、强度、空间和生命周期逻辑，不会因不是 Xbox 而被过滤。Lua 没有直接发送 DS4/DS5 USB/Bluetooth HID 马达报告的 API，所以直连 PlayStation 手柄的物理输出仍要求 DST 本身或 Steam Input 向该设备提供震动能力；这是纯 Lua 客户端 Mod 无法越过的引擎边界，不需要也不使用外部常驻桥接程序。
 
+“自动”模式按当前 DST 设备类型选择响应曲线：Xbox 保留标定幅度与时长；DS4 对短脉冲增加最低持续时间并作轻微响应补偿；PS5/DualSense 使用稍长的最短脉冲和 Legacy Rumble 补偿。Steam Input 把设备报告为通用/XInput 时，可以在局内手动强制 DS4 或 PS5 模式。所有模式只改变马达输出曲线，不改变原版事件、帧时机和过滤规则。
+
 ### 波形与限制
 
 游戏附带 882 Hz Haptic WAV，但 Lua 没有逐采样播放接口，也无法读取马达物理状态。Mod 已从本机原版 WAV 测量并分别校准砍树、采矿、挖地、攻击挥动和肉体/材质命中的持续时间、衰减与相对幅度；不同目标大小及钝器/利器不再使用同一个固定脉冲。事件语义和相对层级可保留，精确左右马达波形仍属于近似，不能称为 100% 原版波形。
@@ -51,16 +53,22 @@ Mod 不调用 Xbox 专属 DLL，而是使用 DST 自己的活动设备与 `TheIn
 - 震动适配：开/关；关闭时不注入任何兼容钩子，也不抑制原生行为。
 - 语言：中文/English；配置页固定双语，运行时日志在重新载入后切换。
 - 总体强度：50%/75%/100%/125%/150%，默认 100%。
+- 手柄震动模式：自动、Xbox/XInput、DualShock 4、PS5/DualSense。
+- 马达响应：原版细节、柔和、强力；默认原版细节。
+- 独立倍率：工具、战斗、受伤危险、玩家交互、Boss、环境、UI/HUD、持续循环。
+- 空间作用范围：75%–150%，只改变世界事件的远端衰减距离。
 - 调试日志：默认关闭。
+
+在世界内按 `F8` 可直接打开本 Mod 的原版配置界面。使用手柄时先打开暂停菜单，再按界面底部标出的 `MENU_MISC_2` 对应按键进入“震动设置”。保存后约 0.5 秒内即时生效，不需要退出世界。运行中关闭“震动适配”会立即停止兼容输出并恢复原生 `TheHaptics` 开关状态。
 
 复现问题后查看 `Documents/Klei/DoNotStarveTogetherBetaBranch/client_log.txt`；正式分支通常为 `Documents/Klei/DoNotStarveTogether/client_log.txt`。若 Klei 以后修复原生 Windows Haptics，把“震动适配”设为关闭即可完整旁路本 Mod。
 
 ## English
 
-Version 1.1.0 is a client-only hybrid compatibility layer. It dynamically indexes the installed `haptics.lua`, captures real client SoundEmitter events, and bridges server-replicated work, melee-hit, local-health, and hungry-state signals at the original action frames. It never rumbles from an A/X button press alone.
+Version 1.2.0 is a client-only hybrid compatibility layer. It dynamically indexes the installed `haptics.lua`, captures real client SoundEmitter events, and bridges server-replicated work, melee-hit, local-health, and hungry-state signals at the original action frames. It never rumbles from an A/X button press alone.
 
 Xbox/XInput (type 1), DualShock 4 (type 2), PS5 Controller (type 7), and DualSense (type 11) all use DST's active-controller abstraction and `TheInputProxy`. Direct DS4/DS5 USB/Bluetooth rumble still requires an output path supplied by DST or Steam Input because Lua cannot send HID motor reports.
 
 Native intensity order, `player_only`, category, volume, spatial attenuation, named-loop lifecycle, pause/disconnect cleanup, and the game's Controller Vibration master setting are preserved. Shipped 882 Hz waveform families were measured to calibrate separate chop, mine, dig, swing, and material-impact pulse envelopes; sample-exact left/right motor playback is not exposed to Lua.
 
-Install at `Don't Starve Together/mods/dst_haptics_compat`, enable the mod, and keep DST Controller Vibration enabled. Options are Compatibility, Language, Overall Strength, and Debug Logging. If Klei repairs native Windows haptics, turn Compatibility OFF to bypass this layer entirely.
+Install at `Don't Starve Together/mods/dst_haptics_compat`, enable the mod, and keep DST Controller Vibration enabled. Press `F8` in-world, or use the `MENU_MISC_2` prompt from the controller pause menu, to open live settings. Controller family, motor response, per-category levels, loop level, spatial reach, language and logging apply without leaving the world. If Klei repairs native Windows haptics, turn Compatibility OFF to bypass this layer entirely.

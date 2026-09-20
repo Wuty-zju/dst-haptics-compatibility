@@ -44,7 +44,7 @@ function M.Get(effect)
     -- AddVibration cannot play those samples, so the pulse envelopes preserve
     -- their measured duration/decay and relative character instead.
     if Any(event, { "use_axe_tree", "use_axe_mushroom", "beaver_chop_tree", "rock_tree/chop" }) then
-        return { pulses = { { 0, 0.055, 1.00 }, { 0.045, 0.045, 0.28 } }, factor = 0.82, total = 0.09 }
+        return { pulses = { { 0, 0.055, 1.00 }, { 0.045, 0.045, 0.28 } }, factor = 0.82, kind = "tool", total = 0.09 }
     end
 
     if Any(event, { "use_pick_rock", "iceboulder_hit", "moon_glass/mine" }) then
@@ -59,12 +59,13 @@ function M.Get(effect)
                 { 0.175, 0.060, 0.09 },
             },
             factor = 0.96,
+            kind = "tool",
             total = 0.235,
         }
     end
 
     if Contains(event, "/dig") then
-        return { pulses = { { 0.025, 0.050, 1.00 }, { 0.07, 0.045, 0.16 } }, factor = 0.68, total = 0.115 }
+        return { pulses = { { 0.025, 0.050, 1.00 }, { 0.07, 0.045, 0.16 } }, factor = 0.68, kind = "tool", total = 0.115 }
     end
 
     if Contains(event, "/impacts/impact_") then
@@ -78,6 +79,7 @@ function M.Get(effect)
         {
             pulses = { { 0, 0.050, 1.00 }, { 0.045, 0.055, 0.54 }, { 0.095, 0.060, 0.16 } },
             factor = size_factor * material_factor,
+            kind = "combat",
             total = 0.155,
         }
     end
@@ -87,6 +89,7 @@ function M.Get(effect)
         {
             pulses = { { 0.030, 0.050, 0.42 }, { 0.070, 0.060, 1.00 }, { 0.125, 0.055, 0.36 } },
             factor = Contains(event, "attack_weapon") and 0.68 or 0.52,
+            kind = "combat",
             total = 0.18,
         }
     end
@@ -103,12 +106,20 @@ function M.Get(effect)
         return { pulses = { { 0, 0.085, 1.00 }, { 0.09, 0.075, 0.62 }, { 0.18, 0.06, 0.36 } }, total = 0.24 }
     end
 
-    if Any(event, { "footstep", "/step", "_step", "land", "chop", "use_axe", "use_pick", "hammer", "/dig", "plant", "impact_", "_hit", "/hit_" }) then
+    if Any(event, { "chop", "use_axe", "use_pick", "hammer", "/dig", "plant" }) then
+        return { pulses = { { 0, 0.062, 1.00 }, { 0.055, 0.050, 0.35 } }, kind = "tool", total = 0.105 }
+    end
+
+    if Any(event, { "impact_", "_hit", "/hit_" }) then
+        return { pulses = { { 0, 0.062, 1.00 }, { 0.055, 0.050, 0.35 } }, kind = "combat", total = 0.105 }
+    end
+
+    if Any(event, { "footstep", "/step", "_step", "land" }) then
         return { pulses = { { 0, 0.062, 1.00 }, { 0.055, 0.050, 0.35 } }, total = 0.105 }
     end
 
     if Any(event, { "whoosh", "swing", "attack_weapon", "attack_", "/attack" }) then
-        return { pulses = { { 0, 0.10, 0.70 }, { 0.09, 0.055, 0.32 } }, factor = 0.58, total = 0.145 }
+        return { pulses = { { 0, 0.10, 0.70 }, { 0.09, 0.055, 0.32 } }, factor = 0.58, kind = "combat", total = 0.145 }
     end
 
     if category == "BOSS" then
