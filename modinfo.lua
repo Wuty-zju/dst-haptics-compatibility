@@ -7,7 +7,7 @@ Fixes silent native TheHaptics output on Windows. Uses the current haptics.lua p
 author = "wuty"
 icon_atlas = "modicon.xml"
 icon = "modicon.tex"
-version = "1.4.0"
+version = "1.5.0"
 
 api_version = 10
 dst_compatible = true

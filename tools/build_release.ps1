@@ -37,6 +37,17 @@ foreach ($name in $runtime) {
     Copy-Item -LiteralPath $source -Destination $stage -Recurse -Force
 }
 
+# Source-relative developer links remain useful in a standalone Workshop ZIP.
+foreach ($readmeName in @('README.md', 'README.en.md')) {
+    $readmePath = Join-Path $stage $readmeName
+    $readmeText = Get-Content -LiteralPath $readmePath -Raw
+    $readmeText = [regex]::Replace($readmeText, '\]\((docs/[^)]+)\)', {
+        param($match)
+        '](' + 'https://github.com/Wuty-zju/dst-haptics-compatibility/blob/v' + $Version + '/' + $match.Groups[1].Value + ')'
+    })
+    [IO.File]::WriteAllText($readmePath, $readmeText, [Text.UTF8Encoding]::new($false))
+}
+
 $previewSource = Join-Path $repo "preview.jpg"
 if (-not (Test-Path -LiteralPath $previewSource)) {
     throw "Missing Steam Workshop preview: $previewSource"

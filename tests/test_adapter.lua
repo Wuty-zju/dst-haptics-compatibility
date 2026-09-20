@@ -396,6 +396,15 @@ paused = false
 before = #vibrations
 RunDelayed()
 assert(#vibrations == before, "paused envelope resumed stale pulses")
+paused = true
+periodic[1].fn()
+now = now + 1
+local paused_tasks = #delayed
+SoundEmitter.PlaySound(player_emitter, "dontstarve/characters/walter/woby/big/footstep")
+assert(#delayed == paused_tasks, "event born while paused queued a future pulse")
+paused = false
+RunDelayed()
+assert(#vibrations == before, "paused event escaped after resume")
 now = now + 1
 SoundEmitter.PlaySound(player_emitter, "dontstarve/characters/walter/woby/big/footstep")
 controller_enabled = false
@@ -486,6 +495,14 @@ assert(prior_calls == old_prior_calls + 1 and later_calls == 1, "hook chain skip
 assert(prior_tail.n == 3 and prior_tail[1] == "extra" and prior_tail[2] == nil and prior_tail[3] == "last",
     "hook chain changed trailing arguments")
 assert(#vibrations == before + 1, "hook chain duplicated haptic output")
+
+api.GetState().last_special_hurt_time = nil
+now = now + 1
+SoundEmitter.PlaySound(Emitter(other_player), "dontstarve/wilson/burned")
+assert(not api.HasRecentSpecialHurt(), "another player's burn suppressed local hurt")
+now = now + 1
+SoundEmitter.PlaySound(player_emitter, "dontstarve/wilson/burned")
+assert(api.HasRecentSpecialHurt(), "local special hurt was not tracked")
 
 local world = { ListenForEvent = function(self, event, fn) assert(event == "onremove"); self.onremove = fn end }
 world_postinit(world)

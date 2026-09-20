@@ -463,6 +463,11 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local function ScheduleProfile(effect, entity, profile, volume, spatial, distance, source, params)
+        -- Reject at observation time as well as playback time: events born
+        -- during a pause/disconnection must not turn into delayed feedback.
+        if not OutputAllowed() then
+            return
+        end
         local duration_scale = Clamp(NumberOr(state.config.duration, 1), 0, 2)
             * EffectScale(effect, profile, "_duration")
         if duration_scale <= 0 then
@@ -588,7 +593,8 @@ function Adapter.Install(config, LoadLocalModule)
             return false
         else
             local lower_event = string.lower(event)
-            if source == "sound" and event ~= "dontstarve/wilson/hit"
+            if source == "sound" and (entity == G.ThePlayer or local_context)
+                and event ~= "dontstarve/wilson/hit"
                 and (string.find(lower_event, "shocked", 1, true) ~= nil
                     or string.find(lower_event, "/freeze_", 1, true) ~= nil
                     or string.find(lower_event, "hud_hot_level", 1, true) ~= nil
