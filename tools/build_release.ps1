@@ -1,12 +1,14 @@
 param(
     [string]$Version = "1.4.0",
-    [string]$OutputRoot = (Join-Path $PSScriptRoot "..\build\release")
+    [string]$OutputRoot = (Join-Path (Split-Path $PSScriptRoot -Parent) "build/release")
 )
 
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $stage = Join-Path $OutputRoot "dst_haptics_compat"
 $zip = Join-Path $OutputRoot ("dst_haptics_compat-{0}.zip" -f $Version)
+$checksum = $zip + ".sha256"
+$preview = Join-Path $OutputRoot "preview.jpg"
 
 if (Test-Path -LiteralPath $stage) {
     Remove-Item -LiteralPath $stage -Recurse -Force
@@ -29,6 +31,12 @@ foreach ($name in @("modicon.tex", "modicon.xml")) {
     }
 }
 
+$previewSource = Join-Path $repo "preview.jpg"
+if (-not (Test-Path -LiteralPath $previewSource)) {
+    throw "Missing Steam Workshop preview: $previewSource"
+}
+Copy-Item -LiteralPath $previewSource -Destination $preview -Force
+
 $modinfo = Get-Content -LiteralPath (Join-Path $stage "modinfo.lua") -Raw
 if ($modinfo -notmatch ('version\s*=\s*"' + [regex]::Escape($Version) + '"')) {
     throw "modinfo.lua version does not match $Version"
@@ -43,6 +51,10 @@ if (Test-Path -LiteralPath $zip) {
     Remove-Item -LiteralPath $zip -Force
 }
 Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
+$hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -LiteralPath $checksum -Value ("{0}  {1}" -f $hash, (Split-Path $zip -Leaf)) -Encoding ascii
 
 Write-Host "Workshop content: $stage"
 Write-Host "Release archive:  $zip"
+Write-Host "SHA-256:         $checksum"
+Write-Host "Workshop preview: $preview"

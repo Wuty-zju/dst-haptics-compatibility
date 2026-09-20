@@ -1,0 +1,35 @@
+name: GitHub Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches mod version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          if ((Get-Content modinfo.lua -Raw) -notmatch ('version\s*=\s*"' + [regex]::Escape($version) + '"')) {
+            throw "Tag and modinfo.lua version differ"
+          }
+      - name: Build release
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          ./tools/build_release.ps1 -Version $version
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: DST Haptics Compatibility ${{ github.ref_name }}
+          body_path: docs/RELEASE_NOTES.md
+          files: |
+            build/release/dst_haptics_compat-*.zip
+            build/release/dst_haptics_compat-*.zip.sha256
+            build/release/preview.jpg
+          fail_on_unmatched_files: true

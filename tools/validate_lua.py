@@ -27,7 +27,10 @@ lua.lua_tolstring.argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.POINTER(ctypes.c
 lua.lua_tolstring.restype=ctypes.c_char_p
 lua.lua_close.argtypes=[ctypes.c_void_p]
 failed=False
+excluded = {'.git', 'build', 'outputs', 'work'}
 for path in sorted(root.rglob('*.lua')):
+    if any(part in excluded for part in path.relative_to(root).parts):
+        continue
     L=lua.luaL_newstate()
     rc=lua.luaL_loadfile(L, str(path).encode('utf-8'))
     if rc:

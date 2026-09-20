@@ -3,4 +3,5 @@
 *.py text eol=lf
 *.md text eol=lf
 *.csv text eol=crlf
+*.jpg binary
 

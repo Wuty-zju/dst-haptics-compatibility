@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -152,6 +153,8 @@ def main():
         })
 
     summary = {
+        "haptics_sha256": hashlib.sha256(haptics.read_bytes()).hexdigest(),
+        "definition_fields": sorted({key for effect in effects for key in effect if key not in {"line"}}),
         "definitions": len(effects),
         "unique_events": len(unique),
         "duplicate_events": {key: value for key, value in duplicate_defs.items() if len(value) > 1},

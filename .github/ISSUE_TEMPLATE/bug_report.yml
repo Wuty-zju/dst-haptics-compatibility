@@ -1,0 +1,47 @@
+name: Bug report / 错误报告
+description: Report an incorrect, missing, duplicated or stuck vibration.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: dropdown
+    id: controller
+    attributes:
+      label: Controller / 手柄
+      options: [Xbox/XInput, DualShock 4, PS5/DualSense, Steam Input/Generic]
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection / 连接
+      options: [USB, Bluetooth, Xbox Wireless, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: event
+    attributes:
+      label: Reproduction / 复现步骤
+      description: State the exact in-game action, target, distance and expected/actual rumble.
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration / 配置
+      description: Include DST Controller Vibration, output mode, controller profile and Steam Input state.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Client log / 客户端日志
+      description: Attach the relevant client_log.txt excerpt with Debug Logging enabled. Remove personal data first.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I reproduced this with the latest release.
+          required: true
+        - label: I checked that the controller can rumble through TheInputProxy or another DST test.
+          required: true

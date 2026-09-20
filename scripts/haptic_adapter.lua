@@ -44,6 +44,7 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local Profiles = LoadLocalModule("scripts/haptic_profiles.lua")
+    local Parameters = LoadLocalModule("scripts/haptic_parameters.lua")
     local L = LoadLocalModule("scripts/localization.lua")
 
     local ok, native_effects = pcall(G.require, "haptics")
@@ -69,6 +70,16 @@ function Adapter.Install(config, LoadLocalModule)
         last_controller_type = nil,
         last_controller_name = nil,
         generation = 0,
+        listener_position = nil,
+        last_special_hurt_time = nil,
+        metrics =
+        {
+            accepted = 0,
+            filtered = 0,
+            pulses = 0,
+            scheduled_pulses = 0,
+            parameter_updates = 0,
+        },
     }
     rawset(SoundEmitter, "_dst_haptics_compat", state)
 
@@ -98,7 +109,24 @@ function Adapter.Install(config, LoadLocalModule)
         unique_count = unique_count + 1
     end
 
-    local function DebugLog(effect, entity, distance, raw_intensity, final_intensity, duration, channel, filtered, reason, source)
+    local function FormatParams(params)
+        if type(params) ~= "table" then
+            return "n/a"
+        end
+        local values = {}
+        for key, value in pairs(params) do
+            values[#values + 1] = tostring(key) .. "=" .. tostring(value)
+        end
+        G.table.sort(values)
+        return #values > 0 and G.table.concat(values, ",") or "n/a"
+    end
+
+    local function DebugLog(effect, entity, distance, raw_intensity, final_intensity, duration, channel, filtered, reason, source, params, parameter_scale)
+        if filtered then
+            state.metrics.filtered = state.metrics.filtered + 1
+        else
+            state.metrics.accepted = state.metrics.accepted + 1
+        end
         if not state.config.debug then
             return
         end
@@ -111,9 +139,12 @@ function Adapter.Install(config, LoadLocalModule)
         end
         state.debug_recent[key] = now
         print(string.format(
-            "[DST Haptics Compat] event=%s category=%s source=%s entity=%s distance=%s raw=%.3f final=%.3f duration=%.3f channel=%s filtered=%s reason=%s",
+            "[DST Haptics Compat] event=%s category=%s player_only=%s audio=%s audio_intensity=%.3f source=%s entity=%s distance=%s raw=%.3f final=%.3f duration=%.3f channel=%s params=%s param_scale=%.3f filtered=%s reason=%s",
             effect.event,
             tostring(effect.category or "UNSPECIFIED"),
+            tostring(effect.player_only == true),
+            tostring(effect.audio),
+            NumberOr(effect.audio_intensity, 1),
             tostring(source or "sound"),
             tostring(identity),
             distance ~= nil and string.format("%.2f", distance) or "n/a",
@@ -121,6 +152,8 @@ function Adapter.Install(config, LoadLocalModule)
             final_intensity or 0,
             duration or 0,
             tostring(channel),
+            FormatParams(params),
+            parameter_scale or 1,
             tostring(filtered == true),
             tostring(reason or "accepted")
         ))
@@ -138,6 +171,17 @@ function Adapter.Install(config, LoadLocalModule)
         end
         local success, paused = pcall(G.IsPaused)
         return success and paused == true
+    end
+
+    local function OutputMode()
+        if state.config.compatibility == false then
+            return "native"
+        end
+        local mode = state.config.output_mode
+        if mode == "native" or mode == "diagnostic" then
+            return mode
+        end
+        return "compatibility"
     end
 
     local CONTROLLER_TYPE_NAMES =
@@ -207,7 +251,7 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local function OutputAllowed()
-        if state.config.compatibility == false or not ProfileAllowsVibration() or IsPaused() then
+        if OutputMode() ~= "compatibility" or not ProfileAllowsVibration() or IsPaused() then
             return false
         end
         local id = GetControllerID()
@@ -219,7 +263,7 @@ function Adapter.Install(config, LoadLocalModule)
     end
 
     local function SuppressNative()
-        if G.TheHaptics ~= nil and G.TheHaptics.EnableVibration ~= nil and state.config.compatibility ~= false then
+        if G.TheHaptics ~= nil and G.TheHaptics.EnableVibration ~= nil and OutputMode() ~= "native" then
             pcall(function() G.TheHaptics:EnableVibration(false) end)
             if not state.native_suppressed then
                 state.native_suppressed = true
@@ -260,6 +304,12 @@ function Adapter.Install(config, LoadLocalModule)
         if IsUIEffect(effect) then
             return 1, nil, nil
         end
+        -- FrontEnd and FocalPoint emitters are native proof that the sound is
+        -- listener-local. Equip, burn, worm travel/digestion and lunar-burn
+        -- feedback use this path despite not belonging to the UI category.
+        if local_context then
+            return 1, nil, nil
+        end
         if G.ThePlayer == nil or G.ThePlayer.Transform == nil then
             return 0, nil, "no_local_player"
         end
@@ -268,7 +318,7 @@ function Adapter.Install(config, LoadLocalModule)
             -- local HUD widgets (for example WX-78 shield feedback). The
             -- frontend/focal-point emitter is local-player proof even though
             -- SoundEmitter:GetEntity() is nil or the focal point, not ThePlayer.
-            if entity ~= G.ThePlayer and not local_context then
+            if entity ~= G.ThePlayer then
                 return 0, nil, "player_only_nonlocal"
             end
             return 1, entity == G.ThePlayer and 0 or nil, nil
@@ -278,17 +328,19 @@ function Adapter.Install(config, LoadLocalModule)
         end
         -- Freeze/overheat and similar HUD danger events are played through the
         -- frontend SoundEmitter, which intentionally has no world entity.
-        if entity == nil and local_context and effect.category == "DANGER" then
-            return 1, nil, nil
-        end
         if entity == nil or entity.Transform == nil then
             return 0, nil, "no_spatial_entity"
         end
 
-        local px, _, pz = G.ThePlayer.Transform:GetWorldPosition()
-        local ex, _, ez = entity.Transform:GetWorldPosition()
-        local dx, dz = ex - px, ez - pz
-        local distance = math.sqrt(dx * dx + dz * dz)
+        local px, py, pz
+        if state.listener_position ~= nil then
+            px, py, pz = state.listener_position[1], state.listener_position[2], state.listener_position[3]
+        else
+            px, py, pz = G.ThePlayer.Transform:GetWorldPosition()
+        end
+        local ex, ey, ez = entity.Transform:GetWorldPosition()
+        local dx, dy, dz = ex - px, ey - py, ez - pz
+        local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         local policy = DISTANCE_POLICY[effect.category] or DISTANCE_POLICY.PLAYER
         local spatial_scale = Clamp(NumberOr(state.config.spatial_scale, 1), 0.5, 2)
         local far = policy.near + (policy.far - policy.near) * spatial_scale
@@ -378,23 +430,23 @@ function Adapter.Install(config, LoadLocalModule)
 
     local function EffectScale(effect, profile)
         local kind = profile.kind
-        local scale
-        if kind == "tool" then
-            scale = state.config.tool_scale
-        elseif kind == "combat" then
-            scale = state.config.combat_scale
-        elseif effect.category == "DANGER" then
-            scale = state.config.danger_scale
+        local category_scale
+        if effect.category == "DANGER" then
+            category_scale = state.config.danger_scale
         elseif effect.category == "BOSS" then
-            scale = state.config.boss_scale
+            category_scale = state.config.boss_scale
         elseif effect.category == "ENVIRONMENT" then
-            scale = state.config.environment_scale
+            category_scale = state.config.environment_scale
         elseif IsUIEffect(effect) then
-            scale = state.config.ui_scale
+            category_scale = state.config.ui_scale
         else
-            scale = state.config.player_scale
+            category_scale = state.config.player_scale
         end
-        local result = Clamp(NumberOr(scale, 1), 0, 2)
+        local semantic_scale = kind == "tool" and state.config.tool_scale
+            or kind == "combat" and state.config.combat_scale
+            or 1
+        local result = Clamp(NumberOr(category_scale, 1), 0, 2)
+            * Clamp(NumberOr(semantic_scale, 1), 0, 2)
         if profile.loop then
             result = result * Clamp(NumberOr(state.config.loop_scale, 1), 0, 2)
         end
@@ -408,15 +460,17 @@ function Adapter.Install(config, LoadLocalModule)
         duration, magnitude = CalibratePulse(duration, magnitude)
         SuppressNative()
         G.TheInputProxy:AddVibration(channel, duration, magnitude, false)
+        state.metrics.pulses = state.metrics.pulses + 1
     end
 
-    local function ScheduleProfile(effect, entity, profile, volume, spatial, distance, source)
+    local function ScheduleProfile(effect, entity, profile, volume, spatial, distance, source, params)
         local raw = NumberOr(effect.vibration_intensity, 1)
+        local parameter_scale = Parameters.GetScale(effect.event, params)
         local base = MapIntensity(raw)
             * Clamp(NumberOr(state.config.strength, 1), 0, 2)
             * NumberOr(profile.factor, 1)
             * EffectScale(effect, profile)
-        base = base * Clamp(NumberOr(volume, 1), 0, 1) * spatial
+        base = base * Clamp(NumberOr(volume, 1), 0, 1) * spatial * parameter_scale
         local channel = ChannelFor(effect, profile)
         local strongest = 0
         local generation = state.generation
@@ -430,6 +484,7 @@ function Adapter.Install(config, LoadLocalModule)
             if pulse[1] <= 0 then
                 AddPulse(channel, pulse[2], magnitude)
             else
+                state.metrics.scheduled_pulses = state.metrics.scheduled_pulses + 1
                 G.scheduler:ExecuteInTime(pulse[1] * time_scale, function()
                     if generation == state.generation then
                         AddPulse(channel, pulse[2], magnitude)
@@ -437,18 +492,18 @@ function Adapter.Install(config, LoadLocalModule)
                 end)
             end
         end
-        DebugLog(effect, entity, distance, raw, strongest, profile.total, channel, false, "accepted", source)
+        DebugLog(effect, entity, distance, raw, strongest, profile.total, channel, false, "accepted", source, params, parameter_scale)
     end
 
     local function LoopKey(emitter, name)
         return tostring(emitter) .. "|" .. tostring(name)
     end
 
-    local function RegisterLoop(effect, emitter, entity, name, volume, profile, distance, source, local_context)
+    local function RegisterLoop(effect, emitter, entity, name, volume, profile, distance, source, local_context, params)
         if name == nil then
             local bounded = { pulses = { { 0, 0.10, 0.70 }, { 0.09, 0.10, 0.55 }, { 0.18, 0.08, 0.40 } }, total = 0.26 }
             local spatial = SpatialFactor(effect, entity, local_context)
-            ScheduleProfile(effect, entity, bounded, volume, spatial, distance, source)
+            ScheduleProfile(effect, entity, bounded, volume, spatial, distance, source, params)
             return
         end
         state.loops[LoopKey(emitter, name)] =
@@ -460,16 +515,19 @@ function Adapter.Install(config, LoadLocalModule)
             volume = NumberOr(volume, 1),
             profile = profile,
             local_context = local_context,
+            params = Parameters.Copy(params) or {},
         }
-        DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, -1, ChannelFor(effect, profile), false, "loop_started", source)
+        local parameter_scale = Parameters.GetScale(effect.event, params)
+        DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, -1, ChannelFor(effect, profile), false, "loop_started", source, params, parameter_scale)
     end
 
-    local function HandleEvent(event, entity, name, volume, source, dedupe_key, local_context)
+    local function HandleEvent(event, entity, name, volume, source, dedupe_key, local_context, params)
         local effect = state.effects[event]
         if effect == nil then
             return false
         end
-        if state.config.compatibility == false then
+        local output_mode = OutputMode()
+        if output_mode == "native" then
             return false
         end
         if effect.vibration ~= true then
@@ -480,12 +538,6 @@ function Adapter.Install(config, LoadLocalModule)
             DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "profile_vibration_off", source)
             return false
         end
-        local controller_id = GetControllerID()
-        if controller_id == nil then
-            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "no_active_controller", source)
-            return false
-        end
-        RefreshControllerOutput(controller_id)
         local spatial, distance, reason = SpatialFactor(effect, entity, local_context)
         if spatial <= 0 then
             DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, reason or "spatially_filtered", source)
@@ -493,6 +545,17 @@ function Adapter.Install(config, LoadLocalModule)
         end
 
         local profile = Profiles.Get(effect)
+        if output_mode == "diagnostic" then
+            local parameter_scale = Parameters.GetScale(effect.event, params)
+            DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, profile.total, ChannelFor(effect, profile), true, "diagnostic_no_output", source, params, parameter_scale)
+            return true
+        end
+        local controller_id = GetControllerID()
+        if controller_id == nil then
+            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "no_active_controller", source)
+            return false
+        end
+        RefreshControllerOutput(controller_id)
         local now = Now()
         -- Sound hooks and replicated-action bridges can observe the same native
         -- event through different Lua paths. Keep this key deliberately small:
@@ -517,12 +580,21 @@ function Adapter.Install(config, LoadLocalModule)
         if profile.loop then
             return false
         else
-            ScheduleProfile(effect, entity, profile, volume, spatial, distance, source)
+            local lower_event = string.lower(event)
+            if source == "sound" and event ~= "dontstarve/wilson/hit"
+                and (string.find(lower_event, "shocked", 1, true) ~= nil
+                    or string.find(lower_event, "/freeze_", 1, true) ~= nil
+                    or string.find(lower_event, "hud_hot_level", 1, true) ~= nil
+                    or string.find(lower_event, "burned", 1, true) ~= nil
+                    or string.find(lower_event, "charlie/attack", 1, true) ~= nil) then
+                state.last_special_hurt_time = now
+            end
+            ScheduleProfile(effect, entity, profile, volume, spatial, distance, source, params)
         end
         return true
     end
 
-    local function HandleSound(emitter, event, name, volume)
+    local function HandleSound(emitter, event, name, volume, params)
         local effect = state.effects[event]
         if effect == nil then
             return
@@ -538,16 +610,23 @@ function Adapter.Install(config, LoadLocalModule)
         end
         local profile = Profiles.Get(effect)
         if profile.loop then
+            local mode = OutputMode()
+            if mode == "native" then
+                return
+            elseif mode == "diagnostic" then
+                HandleEvent(event, entity, name, volume, "sound", nil, local_context, params)
+                return
+            end
             if not ProfileAllowsVibration() or GetControllerID() == nil then
                 return
             end
             local spatial, distance = SpatialFactor(effect, entity, local_context)
             if spatial > 0 then
-                RegisterLoop(effect, emitter, entity, name, volume, profile, distance, "sound", local_context)
+                RegisterLoop(effect, emitter, entity, name, volume, profile, distance, "sound", local_context, params)
             end
             return
         end
-        HandleEvent(event, entity, name, volume, "sound", nil, local_context)
+        HandleEvent(event, entity, name, volume, "sound", nil, local_context, params)
     end
 
     local function SafeHandle(...)
@@ -574,7 +653,8 @@ function Adapter.Install(config, LoadLocalModule)
             context.volume,
             context.source or "bridge",
             key,
-            context.local_context == true
+            context.local_context == true,
+            context.params
         )
     end
 
@@ -589,7 +669,7 @@ function Adapter.Install(config, LoadLocalModule)
         local original_play_params = SoundEmitter.PlaySoundWithParams
         SoundEmitter.PlaySoundWithParams = function(emitter, event, params, volume, ...)
             local results = Pack(original_play_params(emitter, event, params, volume, ...))
-            SafeHandle(emitter, event, nil, volume)
+            SafeHandle(emitter, event, nil, volume, params)
             return unpack(results, 1, results.n)
         end
     end
@@ -635,6 +715,27 @@ function Adapter.Install(config, LoadLocalModule)
         end
     end
 
+    if SoundEmitter.SetParameter ~= nil then
+        local original_set_parameter = SoundEmitter.SetParameter
+        SoundEmitter.SetParameter = function(emitter, name, parameter, value, ...)
+            local results = Pack(original_set_parameter(emitter, name, parameter, value, ...))
+            local loop = state.loops[LoopKey(emitter, name)]
+            if loop ~= nil and type(parameter) == "string" and type(value) == "number" then
+                loop.params[parameter] = value
+                state.metrics.parameter_updates = state.metrics.parameter_updates + 1
+            end
+            return unpack(results, 1, results.n)
+        end
+    end
+
+    if G.Sim ~= nil and G.Sim.SetListener ~= nil then
+        local original_set_listener = G.Sim.SetListener
+        G.Sim.SetListener = function(sim, x, y, z, ...)
+            state.listener_position = { NumberOr(x, 0), NumberOr(y, 0), NumberOr(z, 0) }
+            return original_set_listener(sim, x, y, z, ...)
+        end
+    end
+
     G.scheduler:ExecutePeriodic(0.085, function()
         local combined = 0
         if OutputAllowed() then
@@ -652,12 +753,14 @@ function Adapter.Install(config, LoadLocalModule)
                 else
                     local spatial = SpatialFactor(loop.effect, loop.entity, loop.local_context)
                     local raw = NumberOr(loop.effect.vibration_intensity, 1)
+                    local parameter_scale = Parameters.GetScale(loop.effect.event, loop.params)
                     local magnitude = MapIntensity(raw)
                         * Clamp(NumberOr(state.config.strength, 1), 0, 2)
                         * EffectScale(loop.effect, loop.profile)
                         * Clamp(loop.volume or 1, 0, 1)
                         * spatial
                         * loop.profile.factor
+                        * parameter_scale
                     combined = math.max(combined, magnitude)
                 end
             end
@@ -692,6 +795,21 @@ function Adapter.Install(config, LoadLocalModule)
                 state.bridge_recent[key] = nil
             end
         end
+        if state.config.debug then
+            local active_loops = 0
+            for _ in pairs(state.loops) do
+                active_loops = active_loops + 1
+            end
+            print(string.format(
+                "[DST Haptics Compat] metrics accepted=%d filtered=%d pulses=%d scheduled=%d parameter_updates=%d active_loops=%d",
+                state.metrics.accepted,
+                state.metrics.filtered,
+                state.metrics.pulses,
+                state.metrics.scheduled_pulses,
+                state.metrics.parameter_updates,
+                active_loops
+            ))
+        end
     end)
 
 
@@ -713,13 +831,32 @@ function Adapter.Install(config, LoadLocalModule)
         Emit = BridgeEmit,
         GetEffect = function(event) return state.effects[event] end,
         GetState = function() return state end,
+        HasRecentSpecialHurt = function(window)
+            return state.last_special_hurt_time ~= nil
+                and Now() - state.last_special_hurt_time <= NumberOr(window, 0.12)
+        end,
+        GetDiagnostics = function() return state.metrics end,
+        TestPulse = function(level)
+            local tests =
+            {
+                weak = { duration = 0.08, magnitude = 0.20 },
+                medium = { duration = 0.14, magnitude = 0.50 },
+                strong = { duration = 0.22, magnitude = 0.85 },
+            }
+            local test = tests[level]
+            if test == nil or OutputMode() ~= "compatibility" then
+                return false
+            end
+            AddPulse(G.VIBRATION_CAMERA_SHAKE or 0, test.duration, test.magnitude)
+            return true
+        end,
         ApplyConfig = function(values)
             if type(values) == "table" then
                 for key, value in pairs(values) do
                     state.config[key] = value
                 end
             end
-            if state.config.compatibility == false then
+            if OutputMode() ~= "compatibility" then
                 state.loops = {}
                 state.recent = {}
                 state.bridge_recent = {}

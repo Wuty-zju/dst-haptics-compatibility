@@ -60,13 +60,14 @@ TheHaptics =
     EnableVibration = function(_, value) table.insert(native_enable_calls, value) end,
 }
 
-local function Transform(x, z)
-    return { GetWorldPosition = function() return x, 0, z end }
+local function Transform(x, z, y)
+    return { GetWorldPosition = function() return x, y or 0, z end }
 end
 local player = { GUID = 1, prefab = "wilson", Transform = Transform(0, 0), IsValid = function() return true end }
 local other_player = { GUID = 2, prefab = "willow", Transform = Transform(0, 0), IsValid = function() return true end }
 local near_boss = { GUID = 3, prefab = "deerclops", Transform = Transform(14, 0), IsValid = function() return true end }
 local far_boss = { GUID = 4, prefab = "deerclops", Transform = Transform(100, 0), IsValid = function() return true end }
+local focal_entity = { GUID = 5, prefab = "focalpoint", Transform = Transform(100, 0), IsValid = function() return true end }
 ThePlayer = player
 
 local function Emitter(entity)
@@ -77,7 +78,10 @@ local function Emitter(entity)
 end
 
 local frontend_emitter = Emitter(nil)
+local focal_emitter = Emitter(focal_entity)
 TheFrontEnd = { GetSound = function() return frontend_emitter end }
+TheFocalPoint = { SoundEmitter = focal_emitter }
+Sim = { SetListener = function(_, x, y, z) return "listener-ok", x, y, z end }
 
 SoundEmitter = {}
 function SoundEmitter.PlaySound(emitter, event, name, volume)
@@ -98,6 +102,9 @@ end
 function SoundEmitter.SetVolume(emitter, name, volume)
     return "volume-ok", volume
 end
+function SoundEmitter.SetParameter(emitter, name, parameter, value)
+    return "parameter-ok", parameter, value
+end
 
 VIBRATION_CAMERA_SHAKE = 0
 VIBRATION_BLOOD_FLASH = 1
@@ -110,6 +117,16 @@ package.preload.haptics = function()
         { event = "test/ui/click", vibration = true, vibration_intensity = 0.5, category = "UI" },
         { event = "test/strong", vibration = true, vibration_intensity = 10, category = "PLAYER" },
         { event = "test/loop_LP", vibration = true, vibration_intensity = 1, category = "ENVIRONMENT" },
+        { event = "test/environment/local", vibration = true, vibration_intensity = 1, category = "ENVIRONMENT" },
+        { event = "test/boss/attack", vibration = true, vibration_intensity = 1, category = "BOSS" },
+        { event = "dontstarve/characters/walter/woby/big/footstep", vibration = true, vibration_intensity = 1, category = "PLAYER" },
+        { event = "hookline_2/creatures/boss/crabking/magic_LP", vibration = true, vibration_intensity = 1, category = "BOSS" },
+        { event = "dontstarve/wilson/equip_item", vibration = true, vibration_intensity = 1, category = "PLAYER" },
+        { event = "dontstarve/common/nightmareAddFuel", vibration = true, vibration_intensity = 1, category = "ENVIRONMENT" },
+        { event = "dontstarve/wilson/burned", vibration = true, vibration_intensity = 1, category = "ENVIRONMENT" },
+        { event = "dontstarve/common/teleportworm/travel", vibration = true, vibration_intensity = 1, category = "ENVIRONMENT" },
+        { event = "rifts4/worm_boss/beingdigested_lp", vibration = true, vibration_intensity = 1, category = "BOSS" },
+        { event = "rifts5/lunar_boss/supernova_burst_LP", vibration = true, vibration_intensity = 1, category = "BOSS" },
         { event = "test/duplicate", vibration = true, vibration_intensity = 0.5, category = "PLAYER" },
         { event = "test/duplicate", vibration = true, vibration_intensity = 2, category = "PLAYER" },
     }
@@ -127,9 +144,15 @@ local Adapter = LoadLocalModule("scripts/haptic_adapter.lua")
 local api = Adapter.Install({ language = "en", strength = 1, debug = false }, LoadLocalModule)
 assert(api ~= nil and api.Emit ~= nil)
 assert(SoundEmitter._dst_haptics_compat ~= nil)
-assert(SoundEmitter._dst_haptics_compat.definitions == 7)
+assert(SoundEmitter._dst_haptics_compat.definitions == 17)
 assert(SoundEmitter._dst_haptics_compat.duplicate_events == 1)
 assert(native_enable_calls[#native_enable_calls] == false)
+
+local calibration_before = #vibrations
+assert(api.TestPulse("weak"))
+assert(#vibrations == calibration_before + 1, "explicit calibration pulse did not run")
+assert(not api.TestPulse("unknown"), "unknown calibration level was accepted")
+vibrations = {}
 
 local player_emitter = Emitter(player)
 local a, b, c = SoundEmitter.PlaySound(player_emitter, "not/matched")
@@ -188,6 +211,19 @@ assert(#vibrations == before, "runtime compatibility OFF still emitted vibration
 api.ApplyConfig({ compatibility = true })
 assert(native_enable_calls[#native_enable_calls] == false, "runtime re-enable did not suppress native TheHaptics")
 
+api.ApplyConfig({ output_mode = "diagnostic" })
+now = now + 1
+before = #vibrations
+assert(api.Emit("test/player", player, { source = "diagnostic", semantic_key = "diagnostic" }))
+assert(#vibrations == before, "diagnostic mode emitted motor output")
+assert(native_enable_calls[#native_enable_calls] == false, "diagnostic mode did not suppress native output")
+api.ApplyConfig({ output_mode = "native" })
+now = now + 1
+assert(not api.Emit("test/player", player, { source = "native", semantic_key = "native" }))
+assert(native_enable_calls[#native_enable_calls] == true, "native mode did not restore TheHaptics")
+api.ApplyConfig({ output_mode = "compatibility" })
+assert(native_enable_calls[#native_enable_calls] == false, "compatibility mode did not suppress native TheHaptics")
+
 before = #vibrations
 SoundEmitter.PlaySound(Emitter(other_player), "test/player")
 assert(#vibrations == before, "player_only accepted a nonlocal player")
@@ -197,12 +233,48 @@ SoundEmitter.PlaySound(frontend_emitter, "test/player")
 assert(#vibrations == before + 1, "local HUD player_only event was rejected")
 
 now = now + 1
+before = #vibrations
+SoundEmitter.PlaySound(focal_emitter, "test/environment/local")
+assert(#vibrations == before + 1, "listener-local FocalPoint event was spatially filtered")
+
+for _, event in ipairs({
+    "dontstarve/wilson/equip_item",
+    "dontstarve/common/nightmareAddFuel",
+    "dontstarve/wilson/burned",
+    "dontstarve/common/teleportworm/travel",
+}) do
+    now = now + 1
+    before = #vibrations
+    SoundEmitter.PlaySound(focal_emitter, event)
+    assert(#vibrations == before + 1, "native FocalPoint event was filtered: " .. event)
+end
+
+SoundEmitter.PlaySound(focal_emitter, "rifts4/worm_boss/beingdigested_lp", "worm_boss_digest")
+SoundEmitter.PlaySound(focal_emitter, "rifts5/lunar_boss/supernova_burst_LP", "lunarburn_supernova")
+assert(next(SoundEmitter._dst_haptics_compat.loops) ~= nil, "native FocalPoint loops were not registered")
+SoundEmitter.KillSound(focal_emitter, "worm_boss_digest")
+SoundEmitter.KillSound(focal_emitter, "lunarburn_supernova")
+
+now = now + 1
+before = #vibrations
+SoundEmitter.PlaySound(Emitter(nil), "test/environment/local")
+assert(#vibrations == before, "unowned non-UI event bypassed spatial filtering")
+
+now = now + 1
 SoundEmitter.PlaySound(Emitter(near_boss), "test/boss/step")
 local near_magnitude = vibrations[#vibrations].magnitude
 now = now + 1
 before = #vibrations
 SoundEmitter.PlaySound(Emitter(far_boss), "test/boss/step")
 assert(#vibrations == before, "far boss was not filtered")
+
+local listener_a, listener_b = Sim:SetListener(100, 20, 0)
+assert(listener_a == "listener-ok" and listener_b == 100, "Sim.SetListener return values changed")
+now = now + 1
+before = #vibrations
+SoundEmitter.PlaySound(Emitter(near_boss), "test/boss/step")
+assert(#vibrations == before, "3D audio listener position was ignored")
+Sim:SetListener(0, 0, 0)
 
 now = now + 1
 SoundEmitter.PlaySound(Emitter(nil), "test/ui/click")
@@ -212,6 +284,24 @@ now = now + 1
 SoundEmitter.PlaySound(player_emitter, "test/strong")
 local strong_magnitude = vibrations[#vibrations].magnitude
 assert(strong_magnitude > near_magnitude, "native intensity mapping is not monotonic")
+
+now = now + 1
+SoundEmitter.PlaySoundWithParams(player_emitter, "dontstarve/characters/walter/woby/big/footstep", { intensity = 0.1 })
+local weak_parameter_magnitude = vibrations[#vibrations].magnitude
+now = now + 1
+SoundEmitter.PlaySoundWithParams(player_emitter, "dontstarve/characters/walter/woby/big/footstep", { intensity = 1 })
+assert(vibrations[#vibrations].magnitude > weak_parameter_magnitude, "PlaySoundWithParams intensity was discarded")
+
+api.ApplyConfig({ boss_scale = 0, combat_scale = 1 })
+now = now + 1
+before = #vibrations
+SoundEmitter.PlaySound(Emitter(near_boss), "test/boss/attack")
+assert(#vibrations == before, "Boss category scale did not apply to a combat-family event")
+api.ApplyConfig({ boss_scale = 1, combat_scale = 0 })
+now = now + 1
+SoundEmitter.PlaySound(Emitter(near_boss), "test/boss/attack")
+assert(#vibrations == before, "Combat semantic scale did not apply to a Boss event")
+api.ApplyConfig({ boss_scale = 1, combat_scale = 1 })
 
 now = now + 1
 SoundEmitter.PlaySound(player_emitter, "test/duplicate")
@@ -253,6 +343,19 @@ periodic[1].fn()
 assert(removes[#removes] == 2, "muted loop did not stop its channel")
 SoundEmitter.KillSound(loop_emitter, "beam")
 assert(next(SoundEmitter._dst_haptics_compat.loops) == nil)
+
+now = now + 1
+local crab_emitter = Emitter(near_boss)
+SoundEmitter.PlaySound(crab_emitter, "hookline_2/creatures/boss/crabking/magic_LP", "crabmagic", 1)
+local p1, p2, p3 = SoundEmitter.SetParameter(crab_emitter, "crabmagic", "intensity", 0)
+assert(p1 == "parameter-ok" and p2 == "intensity" and p3 == 0, "SetParameter return values changed")
+before = #vibrations
+periodic[1].fn()
+assert(#vibrations == before, "zero loop parameter still produced vibration")
+SoundEmitter.SetParameter(crab_emitter, "crabmagic", "intensity", 1)
+periodic[1].fn()
+assert(#vibrations == before + 1, "live loop parameter did not restore vibration")
+SoundEmitter.KillSound(crab_emitter, "crabmagic")
 
 local world = { ListenForEvent = function(self, event, fn) assert(event == "onremove"); self.onremove = fn end }
 world_postinit(world)

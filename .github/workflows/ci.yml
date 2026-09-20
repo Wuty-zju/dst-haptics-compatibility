@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lua51:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+      - name: Parse distributable Lua
+        run: |
+          find . -path './.git' -prune -o -path './build' -prune -o -path './work' -prune -o -name '*.lua' -print0 \
+            | xargs -0 -n1 luac5.1 -p
+      - name: Run portable behavior tests
+        env:
+          DST_HAPTICS_MOD_ROOT: ${{ github.workspace }}
+        run: |
+          lua5.1 tests/test_adapter.lua
+          lua5.1 tests/test_client_action_bridge.lua
+          lua5.1 tests/test_haptic_parameters.lua
+          lua5.1 tests/test_runtime_settings.lua
+      - name: Validate Python tools
+        run: python -m compileall -q tools
+
+  workshop-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build clean Workshop package
+        shell: pwsh
+        run: ./tools/build_release.ps1 -Version 1.4.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dst-haptics-compat-1.4.0
+          path: |
+            build/release/dst_haptics_compat-1.4.0.zip
+            build/release/dst_haptics_compat-1.4.0.zip.sha256
+            build/release/preview.jpg
+          if-no-files-found: error

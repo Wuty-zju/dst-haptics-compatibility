@@ -38,14 +38,16 @@ package.preload["screens/redux/modconfigurationscreen"] = function()
 end
 
 local applied = {}
+local test_pulses = {}
 local state = {}
 local api =
 {
     GetState = function() return state end,
     ApplyConfig = function(values) table.insert(applied, values) end,
+    TestPulse = function(level) table.insert(test_pulses, level) end,
 }
-local config = { language = "zh", compatibility = true, strength = 1 }
-local next_config = { language = "zh", compatibility = true, strength = 1 }
+local config = { language = "zh", compatibility = true, strength = 1, calibration_test = "off" }
+local next_config = { language = "zh", compatibility = true, strength = 1, calibration_test = "off" }
 
 local source = assert(os.getenv("DST_HAPTICS_MOD_ROOT"), "DST_HAPTICS_MOD_ROOT is required")
     .. "/scripts/runtime_settings.lua"
@@ -76,8 +78,9 @@ assert(#pushed == 1)
 
 periodic()
 assert(#applied == 0, "unchanged runtime configuration was reapplied")
-next_config = { language = "en", compatibility = true, strength = 0.75 }
+next_config = { language = "en", compatibility = true, strength = 0.75, calibration_test = "medium" }
 periodic()
 assert(#applied == 1 and applied[1].strength == 0.75)
+assert(test_pulses[1] == "medium", "in-world calibration selection did not play a test pulse")
 
 print("runtime settings tests passed")

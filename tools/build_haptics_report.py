@@ -110,13 +110,13 @@ def current_trigger(row: dict) -> tuple[str, str]:
     if event == "dontstarve/wilson/hungry":
         return "本地 ThePlayer hungry 动画进入沿桥接；不依赖声音（原版 audio=false）", "高：本地语义准确；波形为原版 WAV 降采样"
     if event == "dontstarve/wilson/hit":
-        return "客户端原声钩子 + player_classified 的 attacked 服务器脉冲；锤击由成功动作桥接", "高但非逐分支完美：attacked 无 stimuli 字段，特殊受击仍优先由各自声音事件覆盖"
+        return "客户端原声钩子 + player_classified 的 attacked 服务器脉冲；普通受击短暂延后，让特殊受击原声优先；锤击由成功动作桥接", "高但非逐分支完美：attacked 无 stimuli 字段；相邻帧可见的特殊受击声会抑制 generic hit"
     if event in WORK_EVENTS:
         return "客户端原声钩子 + player_classified performaction 回传后的工作事件解析", "高：取消/失败动作不震；目标特殊材质按原版标签选择"
     if event.startswith("dontstarve/impacts/impact_"):
         return "客户端原声钩子 + 服务器回传 ATTACK 后的 client-safe CanHitTarget 等价校验与原版材质解析", "中高：挥空被过滤；NPC 服务端隐藏护甲/AOE 特例无法由纯客户端完全获知"
     if is_loop(event):
-        return "SoundEmitter 具名循环钩子；PlayingSound、SetVolume、KillSound/KillAllSounds 驱动", "高（客户端 Lua 可见循环）；纯服务端直接复制且无 Lua 回调的循环受引擎边界限制"
+        return "SoundEmitter 具名循环钩子；PlayingSound、SetParameter、SetVolume、KillSound/KillAllSounds 驱动", "高（客户端 Lua 可见循环）；已验证参数逐事件映射，未知参数保持中性"
     realm = source_realm(row.get("references", []))
     if realm == "client":
         return "SoundEmitter.PlaySound / PlaySoundWithParams 原事件 O(1) 索引钩子", "高：客户端 Lua 原调用、参数与返回值不改变"
@@ -142,12 +142,12 @@ def original_logic(row: dict) -> str:
 
 def spatial_logic(row: dict) -> str:
     if row.get("player_only") is True:
-        return "要求 emitter entity == ThePlayer；原版明确由本地 FrontEnd/FocalPoint HUD 发出的少数事件视为本地上下文；其它玩家/NPC 过滤"
+        return "要求 emitter entity == ThePlayer；原版明确由本地 FrontEnd/FocalPoint 发出的事件视为监听者本地上下文；其它玩家/NPC 过滤"
     if is_ui(row):
         return "UI/HUD 非空间，强度不随世界距离衰减"
     category = row.get("category") or "PLAYER"
     ranges = {"PLAYER": "5–26", "DANGER": "7–34", "ENVIRONMENT": "8–46", "BOSS": "12–64"}
-    return f'{category} 世界空间平滑衰减，默认近—远 {ranges.get(category, "5–26")} 单位；超距归零，可由 Spatial Reach 缩放'
+    return f'{category} 以 Sim.SetListener 三维位置进行世界空间平滑衰减，默认近—远 {ranges.get(category, "5–26")} 单位；超距归零，可由 Spatial Reach 缩放'
 
 
 def interaction_guard(row: dict) -> str:
@@ -163,7 +163,7 @@ def main():
     parser = argparse.ArgumentParser(description="Build the complete original-vs-current DST haptics audit table.")
     parser.add_argument("--audit", type=Path, default=DEFAULT_AUDIT)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    parser.add_argument("--version", default="1.3.0")
+    parser.add_argument("--version", default="1.4.0")
     args = parser.parse_args()
     version = args.version
     args.out.mkdir(parents=True, exist_ok=True)

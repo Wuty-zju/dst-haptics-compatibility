@@ -6,6 +6,7 @@ local world_postinit
 local queued = {}
 local emitted = {}
 local game_time = 10
+local special_hurt = false
 
 function GetTime() return game_time end
 
@@ -46,19 +47,21 @@ local api =
         table.insert(emitted, { event = event, entity = entity, source = context.source })
         return true
     end,
+    HasRecentSpecialHurt = function() return special_hurt end,
 }
 
 local function Transform(x, z)
     return { GetWorldPosition = function() return x, 0, z end }
 end
 
+local target_valid = true
 local target =
 {
     GUID = 20,
     prefab = "evergreen",
     tags = { tree = true },
     Transform = Transform(1, 0),
-    IsValid = function() return true end,
+    IsValid = function() return target_valid end,
     IsInLimbo = function() return false end,
     HasTag = function(self, tag) return self.tags[tag] == true end,
     HasAnyTag = function(self, ...)
@@ -119,6 +122,12 @@ Bridge.Install(api, {})
 local function EmptyState()
     return { onenter = function() return "ok" end }
 end
+
+local function RunQueued()
+    local pending = queued
+    queued = {}
+    for i = 1, #pending do pending[i].fn() end
+end
 local sg =
 {
     states =
@@ -146,7 +155,14 @@ player.listeners.performaction(player)
 assert(emitted[#emitted].event == "dontstarve/wilson/use_pick_rock", "mine hit was not bridged")
 
 player.listeners.attacked(player, {})
+RunQueued()
 assert(emitted[#emitted].event == "dontstarve/wilson/hit", "server-confirmed attack was not bridged")
+local hurt_count = #emitted
+special_hurt = true
+player.listeners.attacked(player, {})
+RunQueued()
+assert(#emitted == hurt_count, "special hurt signal did not suppress generic hit fallback")
+special_hurt = false
 
 current_anim = "hungry"
 player.monitor(player)
@@ -168,6 +184,14 @@ count = #emitted
 player.listeners.performaction(player)
 assert(#emitted == count, "out-of-range melee attack incorrectly emitted an impact")
 target.Transform = Transform(1, 0)
+
+player.bufferedaction = { target = target, invobject = weapon }
+sg.states.attack.onenter(player)
+target_valid = false
+player.listeners.performaction(player)
+assert(emitted[#emitted].event == "dontstarve/impacts/impact_flesh_med_sharp", "confirmed killing hit lost its captured material impact")
+assert(emitted[#emitted].entity == player, "removed hit target was not rebound to the local player for safe output")
+target_valid = true
 
 local world =
 {

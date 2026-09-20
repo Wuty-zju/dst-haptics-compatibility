@@ -1,5 +1,17 @@
 # Changelog / 更新日志
 
+## 1.4.0 — 2026-09-20
+
+- Treat verified FrontEnd/FocalPoint emitters as listener-local across every native category.
+- Track the native three-dimensional audio listener instead of assuming the player transform is the listener.
+- Preserve `PlaySoundWithParams` and live named-loop `SetParameter` values with exact, source-audited policies.
+- Compose native category and semantic tool/combat levels, so Boss attacks obey both Boss and Combat settings.
+- Defer generic local hurt briefly so an authoritative electric/freeze/burn sound can prevent duplicate feedback.
+- Preserve capture-time material evidence for server-confirmed killing blows whose target is removed before replication arrives.
+- Add explicit Compatibility, Native and no-motor Diagnostic modes.
+- Add Steam Workshop staging validation, an original preview image, update signatures and expanded Lua 5.1 regression coverage.
+- 修正 FocalPoint、本地监听者三维距离、声音/循环参数、Boss×战斗双轴倍率、特殊受击去重与击杀目标快照，并加入原生/兼容/诊断模式和创意工坊发布校验。
+
 ## 1.3.0 — 2026-09-20
 
 - Replaced fixed animation-frame work guesses with server-confirmed `player_classified.performaction` bridging.
@@ -24,4 +36,3 @@
 ## 1.0.0 — 2026-09-20
 
 - Initial dynamic `haptics.lua` index, SoundEmitter compatibility layer, spatial filtering, deduplication and loop lifecycle handling.
-

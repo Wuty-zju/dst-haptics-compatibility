@@ -91,11 +91,18 @@ function RuntimeSettings.Install(api, config, modname, read_config)
     G.scheduler:ExecutePeriodic(0.5, function()
         local ok, values = pcall(read_config)
         if ok and type(values) == "table" and not SameConfig(config, values) then
+            local previous_test = config.calibration_test
             api.ApplyConfig(values)
+            if values.calibration_test ~= previous_test
+                and values.calibration_test ~= "off"
+                and api.TestPulse ~= nil then
+                api.TestPulse(values.calibration_test)
+            end
             if values.debug then
                 print(string.format(
-                    "[DST Haptics Compat] runtime settings applied: enabled=%s controller=%s response=%s strength=%.2f",
+                    "[DST Haptics Compat] runtime settings applied: enabled=%s mode=%s controller=%s response=%s strength=%.2f",
                     tostring(values.compatibility),
+                    tostring(values.output_mode),
                     tostring(values.controller_profile),
                     tostring(values.response_mode),
                     values.strength or 1

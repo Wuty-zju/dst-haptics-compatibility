@@ -16,10 +16,12 @@ local config =
 {
     compatibility = compatibility ~= false,
     language = GetModConfigData("language", true) or "zh",
+    output_mode = GetModConfigData("output_mode", true) or "compatibility",
     -- DST's restricted mod environment does not expose Lua's tonumber.
     strength = type(strength_value) == "number" and strength_value or 1,
     controller_profile = GetModConfigData("controller_profile", true) or "auto",
     response_mode = GetModConfigData("response_mode", true) or "detail",
+    calibration_test = GetModConfigData("calibration_test", true) or "off",
     tool_scale = ConfigNumber("tool_scale", 1),
     combat_scale = ConfigNumber("combat_scale", 1),
     danger_scale = ConfigNumber("danger_scale", 1),
@@ -37,9 +39,11 @@ local function ReadRuntimeConfig()
     {
         compatibility = GetModConfigData("compatibility", true) ~= false,
         language = GetModConfigData("language", true) or "zh",
+        output_mode = GetModConfigData("output_mode", true) or "compatibility",
         strength = ConfigNumber("strength", 1),
         controller_profile = GetModConfigData("controller_profile", true) or "auto",
         response_mode = GetModConfigData("response_mode", true) or "detail",
+        calibration_test = GetModConfigData("calibration_test", true) or "off",
         tool_scale = ConfigNumber("tool_scale", 1),
         combat_scale = ConfigNumber("combat_scale", 1),
         danger_scale = ConfigNumber("danger_scale", 1),

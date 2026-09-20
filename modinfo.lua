@@ -5,7 +5,7 @@ description = [[
 Fixes silent native TheHaptics output on Windows. Uses the current haptics.lua plus replicated action bridges, controller-family output profiles, and live in-world configuration.
 ]]
 author = "wuty"
-version = "1.3.0"
+version = "1.4.0"
 
 api_version = 10
 dst_compatible = true
@@ -53,6 +53,18 @@ configuration_options =
         default = "zh",
     },
     {
+        name = "output_mode",
+        label = "输出模式 / Output Mode",
+        hover = "兼容模式驱动马达；原生模式完全旁路；诊断模式禁用原生和兼容马达，开启调试日志后记录事件。 / Compatibility drives motors; Native fully bypasses; Diagnostic disables all motor output and logs events when Debug Logging is ON.",
+        options =
+        {
+            { description = "兼容 / Compatibility", data = "compatibility" },
+            { description = "原生 / Native", data = "native" },
+            { description = "仅诊断 / Diagnostic", data = "diagnostic" },
+        },
+        default = "compatibility",
+    },
+    {
         name = "strength",
         label = "总体震动强度 / Overall Strength",
         hover = "在保留原版相对层级的基础上缩放最终输出。 / Scales final output while preserving original relative levels.",
@@ -90,6 +102,19 @@ configuration_options =
             { description = "强力 / Punchy", data = "punchy" },
         },
         default = "detail",
+    },
+    {
+        name = "calibration_test",
+        label = "测试脉冲 / Calibration Pulse",
+        hover = "在局内切换到弱/中/强会立即播放一次测试脉冲；这不是游戏事件。切回关闭可再次测试同一档。 / Changing to Weak/Medium/Strong in-world plays one explicit test pulse. Return to OFF before repeating the same level.",
+        options =
+        {
+            { description = "关闭 / OFF", data = "off" },
+            { description = "弱 / Weak", data = "weak" },
+            { description = "中 / Medium", data = "medium" },
+            { description = "强 / Strong", data = "strong" },
+        },
+        default = "off",
     },
     {
         name = "tool_scale",

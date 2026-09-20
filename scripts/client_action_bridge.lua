@@ -5,6 +5,9 @@ local tostring = G.tostring
 local unpack = G.unpack
 
 local Bridge = {}
+local ResolveImpactSound
+local AttackIsMelee
+local CanResolveMeleeHit
 
 local function Pack(...)
     return { n = G.select("#", ...), ... }
@@ -37,14 +40,22 @@ end
 
 local function CaptureBufferedAction(inst, kind, captures)
     local action = inst.GetBufferedAction ~= nil and inst:GetBufferedAction() or nil
-    captures[inst] =
+    local capture =
     {
         kind = kind,
         target = action ~= nil and action.target or nil,
         invobject = action ~= nil and action.invobject or nil,
         sequence = (captures[inst] ~= nil and captures[inst].sequence or 0) + 1,
         captured_at = G.GetTime ~= nil and G.GetTime() or 0,
+        target_guid = action ~= nil and action.target ~= nil and action.target.GUID or nil,
     }
+    if kind == "attack" and AttackIsMelee ~= nil and CanResolveMeleeHit ~= nil
+        and AttackIsMelee(capture.invobject)
+        and CanResolveMeleeHit(inst, capture.target, capture.invobject) then
+        capture.capture_hit_valid = true
+        capture.capture_impact_event = ResolveImpactSound(capture.target, capture.invobject)
+    end
+    captures[inst] = capture
 end
 
 local function WrapState(sg, name, kind, captures)
@@ -129,7 +140,7 @@ local function ResolveArmorImpactSound(target, weaponmod)
     return nil
 end
 
-local function ResolveImpactSound(target, weapon)
+ResolveImpactSound = function(target, weapon)
     if not IsValid(target) then
         return nil
     end
@@ -154,14 +165,14 @@ local function ResolveImpactSound(target, weapon)
     return "dontstarve/impacts/impact_flesh_med_" .. weaponmod
 end
 
-local function AttackIsMelee(weapon)
+AttackIsMelee = function(weapon)
     return weapon == nil
         or not (HasTag(weapon, "projectile")
             or HasTag(weapon, "complexprojectile")
             or HasTag(weapon, "rangedweapon"))
 end
 
-local function CanResolveMeleeHit(inst, target, weapon)
+CanResolveMeleeHit = function(inst, target, weapon)
     if not (IsValid(inst) and IsValid(target)) or HasAnyTag(target, "dead", "INLIMBO") then
         return false
     end
@@ -219,7 +230,7 @@ function Bridge.Install(api)
             return
         end
         attached[player] = true
-        local monitor = { cycle = 0, hungry = false }
+        local monitor = { cycle = 0, hungry = false, attacked = 0 }
 
         -- Hungry is one of only three world events whose original definition
         -- deliberately has audio=false. No sound call exists to hook, so use a
@@ -258,15 +269,22 @@ function Bridge.Install(api)
             end
 
             if capture.kind == "attack" then
-                if AttackIsMelee(capture.invobject)
-                    and CanResolveMeleeHit(inst, capture.target, capture.invobject) then
-                    local event = ResolveImpactSound(capture.target, capture.invobject)
-                    if event ~= nil and api.GetEffect(event) ~= nil then
-                        api.Emit(event, capture.target,
-                        {
-                            source = "server_confirmed_combat",
-                            semantic_key = "attack|" .. tostring(capture.sequence) .. "|" .. tostring(capture.target.GUID or capture.target),
-                        })
+                if AttackIsMelee(capture.invobject) then
+                    local current_hit = CanResolveMeleeHit(inst, capture.target, capture.invobject)
+                    local recently_removed_after_valid_capture = not IsValid(capture.target)
+                        and capture.capture_hit_valid == true
+                        and now - capture.captured_at <= 0.35
+                    if current_hit or recently_removed_after_valid_capture then
+                        local event = current_hit
+                            and ResolveImpactSound(capture.target, capture.invobject)
+                            or capture.capture_impact_event
+                        if event ~= nil and api.GetEffect(event) ~= nil then
+                            api.Emit(event, current_hit and capture.target or inst,
+                            {
+                                source = "server_confirmed_combat",
+                                semantic_key = "attack|" .. tostring(capture.sequence) .. "|" .. tostring(capture.target_guid or capture.target),
+                            })
+                        end
                     end
                 end
                 return
@@ -291,12 +309,30 @@ function Bridge.Install(api)
         -- temperature, construction costs and healing, which are not Wilson hit
         -- haptics. The native sound hook remains authoritative when available.
         player:ListenForEvent("attacked", function(inst)
-            if inst == G.ThePlayer then
+            if inst ~= G.ThePlayer then
+                return
+            end
+            monitor.attacked = monitor.attacked + 1
+            local attacked_sequence = monitor.attacked
+            local function EmitGenericHit()
+                if inst ~= G.ThePlayer or not IsValid(inst) then
+                    return
+                end
+                if api.HasRecentSpecialHurt ~= nil and api.HasRecentSpecialHurt(0.12) then
+                    return
+                end
                 api.Emit("dontstarve/wilson/hit", inst,
                 {
                     source = "server_confirmed_attacked",
-                    semantic_key = "attacked|" .. tostring(G.GetTime ~= nil and G.GetTime() or 0),
+                    semantic_key = "attacked|" .. tostring(attacked_sequence),
                 })
+            end
+            -- Give a native electric/freeze/burn danger sound one short frame
+            -- window to become authoritative before falling back to Wilson hit.
+            if inst.DoTaskInTime ~= nil then
+                inst:DoTaskInTime(0.05, EmitGenericHit)
+            else
+                EmitGenericHit()
             end
         end)
     end

@@ -1,8 +1,8 @@
 # DST Haptics Compatibility / 饥荒联机版手柄震动兼容
 
-版本 1.3.0，纯客户端 Mod。
+版本 1.4.0，纯客户端 Mod。
 
-[完整 489 事件审计表](docs/audit/DST-Haptics-Event-Audit-1.3.0.csv) · [审计摘要](docs/audit/DST-Haptics-Audit-Summary-1.3.0.md) · [架构说明](docs/ARCHITECTURE.md) · [测试方法](docs/TESTING.md) · [更新日志](CHANGELOG.md)
+[完整 489 事件审计表](docs/audit/DST-Haptics-Event-Audit-1.4.0.csv) · [审计摘要](docs/audit/DST-Haptics-Audit-Summary-1.4.0.md) · [架构说明](docs/ARCHITECTURE.md) · [测试方法](docs/TESTING.md) · [硬件矩阵](docs/HARDWARE_MATRIX.md) · [1.4.0 计划](docs/PLAN-1.4.0.md) · [更新日志](CHANGELOG.md)
 
 ## 中文
 
@@ -11,17 +11,17 @@
 这是一个 Hybrid Compatibility Layer：
 
 1. 启动时读取当前游戏的 `scripts/haptics.lua`，动态建立原版事件索引。事件、`vibration`、`vibration_intensity`、`audio`、`audio_intensity`、`player_only`、`category` 均以本机当前 DST 为准，不复制固定事件表。
-2. 包装客户端 `SoundEmitter.PlaySound` 与 `PlaySoundWithParams`，捕获客户端 Lua 真正播放的原版 Haptic 声音事件。
+2. 包装客户端 `SoundEmitter.PlaySound` 与 `PlaySoundWithParams`，捕获客户端 Lua 真正播放的原版 Haptic 声音事件；当前原版用到的 `intensity`/`size` 参数会按逐事件证据映射，未知参数保持中性。
 3. DST 专用服务器播放的部分声音由引擎直接复制到客户端，绕过客户端 Lua 函数。对可证明的缺口，Mod 捕获本地原版动作上下文，并等待 `player_classified.performaction` 或 `attacked` 的服务器回传后再桥接砍树、采矿、锤击、挖地、近战材质命中及本地玩家受击；它不监听 A/X 键，也不会仅因动作动画开始而震动。原版 `audio=false` 的饥饿事件使用本地 hungry 动画进入沿。
 4. 最终只把已经存在于当前 `haptics.lua` 的事件交给 `TheInputProxy:AddVibration`。兼容层开启时关闭无输出的原生 `TheHaptics`，防止 Klei 修复后双震。
 
 ### 已保留的原版语义
 
 - 动态事件覆盖与未来新增事件的自动接入（只要该事件能在客户端 Lua 观察到）。
-- 原版 `vibration_intensity` 的单调强度层级。
+- 原版 `vibration_intensity` 的单调强度层级；原版 category 与工具/战斗语义倍率作为两个独立轴组合。
 - `player_only`、category、调用音量、UI/世界空间差异和 Boss/环境距离衰减。
 - 原版攻击挥动与实际材质命中是两类独立事件；挥空是否有挥动震动由当前 `haptics.lua` 决定。
-- 具名 `_LP`/loop 声音随 `KillSound`、`KillAllSounds`、实体失效、暂停、世界卸载和手柄断开清理。
+- 具名 `_LP`/loop 声音随 `SetParameter`、`SetVolume`、`KillSound`、`KillAllSounds`、实体失效、暂停、世界卸载和手柄断开变化/清理。
 - Profile 中“控制器震动”仍是总开关；关闭后兼容层不输出。
 
 工作和近战桥接不再用固定动画帧猜测成功。它等待原版 `player_classified` 的服务器动作结果回传，因此被取消、被服务器拒绝或失效的工作动作不会震。矿物冰冻、月玻璃/晶体以及蘑菇树、石树、海狸形态均选择对应原版事件。近战还复刻 release 版 `combat_replica:CanHitTarget` 的 3D 距离和 0.5 预测容差；材质命中优先按原版护甲优先级，再调用游戏自己的 `GetWallImpactSound`、`GetObjectImpactSound`、`GetCreatureImpactSound`。挥动声仍独立遵循原版，因此严格原版模式下挥空可能有 whoosh，但不会凭空产生材质 impact。
@@ -53,10 +53,12 @@ Mod 不调用 Xbox 专属 DLL，而是使用 DST 自己的活动设备与 `TheIn
 在主菜单“模组”中启用 **DST Haptics Compatibility / 手柄震动兼容**。游戏原版“控制器震动”和 Mod 的“震动适配”必须同时开启。配置项：
 
 - 震动适配：开/关；关闭时已安装钩子完整旁路、不输出兼容震动，并恢复原生 `TheHaptics`。
+- 输出模式：兼容、原生、仅诊断。仅诊断会禁止原生与兼容马达输出，只记录可观察事件。
 - 语言：中文/English；配置页固定双语，运行时日志在重新载入后切换。
 - 总体强度：50%/75%/100%/125%/150%，默认 100%。
 - 手柄震动模式：自动、Xbox/XInput、DualShock 4、PS5/DualSense。
 - 马达响应：原版细节、柔和、强力；默认原版细节。
+- 测试脉冲：在局内显式选择弱/中/强，测试当前 Xbox/DS4/DualSense 输出路径，不会由玩法自动触发。
 - 独立倍率：工具、战斗、受伤危险、玩家交互、Boss、环境、UI/HUD、持续循环。
 - 空间作用范围：75%–150%，只改变世界事件的远端衰减距离。
 - 调试日志：默认关闭。
@@ -67,7 +69,7 @@ Mod 不调用 Xbox 专属 DLL，而是使用 DST 自己的活动设备与 `TheIn
 
 ### 原版事件全量结果
 
-本机 build 752666 的原版表有 492 条定义、489 个唯一 event：PLAYER 232、BOSS 166、ENVIRONMENT 53、DANGER 13、UI 22、未指定 3。390 个唯一 event 在解包 Lua 中找到字面触发证据；其余 99 个仍进入动态索引，但不凭空构造触发。每一项的原版字段、调用文件/行号、当前捕获路径、正常交互保护、空间逻辑、实际包络与限制均列在 [完整 CSV](docs/audit/DST-Haptics-Event-Audit-1.3.0.csv)。
+本机 build 752666 的原版表有 492 条定义、489 个唯一 event：PLAYER 232、BOSS 166、ENVIRONMENT 53、DANGER 13、UI 22、未指定 3。390 个唯一 event 在解包 Lua 中找到字面触发证据；其余 99 个仍进入动态索引，但不凭空构造触发。每一项的原版字段、调用文件/行号、当前捕获路径、正常交互保护、空间逻辑、实际包络与限制均列在 [完整 CSV](docs/audit/DST-Haptics-Event-Audit-1.4.0.csv)。
 
 这张表用于区分三种不同的“覆盖”：客户端可见原声事件可精确桥接；工作/受击/近战等有服务器复制证明的缺口可受约束桥接；完全绕过客户端 Lua 的服务器一发事件只能条件覆盖。把最后一种标成“完整支持”会掩盖纯客户端 API 边界，因此项目不会这样做。
 
@@ -82,16 +84,16 @@ Mod 不调用 Xbox 专属 DLL，而是使用 DST 自己的活动设备与 `TheIn
 
 ### 开发与审计
 
-仓库不分发 Klei 原始 Lua 或 Haptic WAV。`tools/` 中的审计器接受本机当前脚本和资源路径，`tests/` 使用 DST 兼容 Lua 5.1 运行行为回归。复现命令与物理验收清单见 [测试文档](docs/TESTING.md)。历史版本源码通过 Git tag `v1.0.0`–`v1.3.0` 保留，成品与报告在 GitHub Releases 中提供。
+仓库不分发 Klei 原始 Lua 或 Haptic WAV。`tools/` 中的审计器接受本机当前脚本和资源路径，`tests/` 使用 DST 兼容 Lua 5.1 运行行为回归。复现命令与物理验收清单见 [测试文档](docs/TESTING.md)。历史版本源码通过 Git tag `v1.0.0`–`v1.4.0` 保留，成品与报告在 GitHub Releases 中提供。
 
 ## English
 
-Version 1.3.0 is a client-only hybrid compatibility layer. It dynamically indexes the installed `haptics.lua`, captures real client SoundEmitter events, and waits for server-confirmed `performaction`/`attacked` replication before bridging work, melee impact and local hurt gaps. Hungry uses the original audio-free animation edge. It never rumbles from an A/X button press or an unconfirmed action animation alone.
+Version 1.4.0 is a client-only hybrid compatibility layer. It dynamically indexes the installed `haptics.lua`, captures real client SoundEmitter events and audited event parameters, and waits for server-confirmed `performaction`/`attacked` replication before bridging work, melee impact and local hurt gaps. Hungry uses the original audio-free animation edge. It never rumbles from an A/X button press or an unconfirmed action animation alone.
 
 Xbox/XInput (type 1), DualShock 4 (type 2), PS5 Controller (type 7), and DualSense (type 11) all use DST's active-controller abstraction and `TheInputProxy`. Direct DS4/DS5 USB/Bluetooth rumble still requires an output path supplied by DST or Steam Input because Lua cannot send HID motor reports.
 
-Native intensity order, `player_only`, category, volume, spatial attenuation, named-loop lifecycle, pause/disconnect cleanup, and the game's Controller Vibration master setting are preserved. Shipped 882 Hz waveform families were measured to calibrate separate chop, mine, dig, swing, material-impact, hunger, freeze and heat pulse envelopes; sample-exact left/right motor playback is not exposed to Lua.
+Native intensity order, `player_only`, category, parameter/volume changes, listener-relative spatial attenuation, named-loop lifecycle, pause/disconnect cleanup, and the game's Controller Vibration master setting are preserved. Shipped 882 Hz waveform families were measured to calibrate separate chop, mine, dig, swing, material-impact, hunger, freeze and heat pulse envelopes; sample-exact left/right motor playback is not exposed to Lua.
 
 Install at `Don't Starve Together/mods/dst_haptics_compat`, enable the mod, and keep DST Controller Vibration enabled. Press `F8` in-world, or use the `MENU_MISC_2` prompt from the controller pause menu, to open live settings. Controller family, motor response, per-category levels, loop level, spatial reach, language and logging apply without leaving the world. If Klei repairs native Windows haptics, turn Compatibility OFF to bypass this layer entirely.
 
-The audited build contains 492 definitions / 489 unique events. The [full event matrix](docs/audit/DST-Haptics-Event-Audit-1.3.0.csv) records every native field, source evidence, current route, interaction guard, spatial/player-only rule, output envelope and fidelity boundary. See [Architecture](docs/ARCHITECTURE.md), [Testing](docs/TESTING.md), and [Changelog](CHANGELOG.md) for reproducible development details. Klei source scripts and raw waveform assets are intentionally not redistributed.
+The audited build contains 492 definitions / 489 unique events. The [full event matrix](docs/audit/DST-Haptics-Event-Audit-1.4.0.csv) records every native field, source evidence, current route, interaction guard, spatial/player-only rule, output envelope and fidelity boundary. See [Architecture](docs/ARCHITECTURE.md), [Testing](docs/TESTING.md), and [Changelog](CHANGELOG.md) for reproducible development details. Klei source scripts and raw waveform assets are intentionally not redistributed.
