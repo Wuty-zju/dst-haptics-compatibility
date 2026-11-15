@@ -40,8 +40,15 @@ GitHub API确认最新release1.5.0，本地ZIP hash与线上digest一致。
    不再自动复用旧快照。原始结果同目录 `verify-portable.json`。
 
 统一入口结果：`.local/evidence/2026-11-15-validation/verify.json`；
-独立包/保护检查：同目录 `package.json`。最终提交后的重复核对若执行，另存新文件，
-不覆盖这次记录。远端CI与分支同步在完成提交后单独核对，不能用本地PASS代替。
+独立包/保护检查：同目录 `package.json`。
+提交 `9ebcdc3c57217d1dae04370523b8e048ac042b87` 后已再次验证15项全部PASS，
+另存 `verify-final.json`，SHA-256为
+`ccf57bf30e0d2b97eff88dfa0e1377850b44eb1b4c36ef415b974dfbec172266`，不覆盖原始记录。
+
+远端 [CI run 43701891053](https://github.com/Wuty-zju/dst-haptics-compatibility/actions/runs/43701891053)
+在同一提交上两项job均success：Linux Lua5.1验证、Windows发布包与拒绝覆盖检查。
+维护分支已推送并跟踪origin同名分支，[草稿PR #1](https://github.com/Wuty-zju/dst-haptics-compatibility/pull/1)
+保留差异；未合并main、未新发版。本文后补的交接信息是文档提交，不改运行时。
 
 候选构建只是维护工具验收，不分发。Mod版本暂留1.5.0，因此新增README文档链接
 会指向尚未包含这些文档的历史tag；下一次正式发版先升版并在对应tag包含这些文档，

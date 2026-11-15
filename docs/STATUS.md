@@ -14,6 +14,10 @@
 | 手工本地安装 | 已于 9 月 20 日移出游戏；11 月 15 日检查未发现 `mods/dst_haptics_compat`，保留外部可恢复备份 |
 | 本次维护 | 维护分支 `codex/workspace-maintenance`；不升 Mod 版本、不改震动运行时、不安装或上传 Workshop |
 
+维护成果已推送同名远端分支，提交 `9ebcdc3` 的 [CI](https://github.com/Wuty-zju/dst-haptics-compatibility/actions/runs/43701891053)
+通过；[草稿 PR #1](https://github.com/Wuty-zju/dst-haptics-compatibility/pull/1)保存完整可审阅差异。
+`main` 与已发布tag保持原状；新任务请从包含维护提交的基线开始。
+
 ## 当前原版基准
 
 当前本机 DST version `762172`，Steam build `26474873`。11 月 15 日从安装目录
