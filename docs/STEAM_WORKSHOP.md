@@ -12,6 +12,11 @@ is historical, not the current installation state. See [status](STATUS.md).
 For further uploads, log into the original author Steam account and select this
 existing item in the official uploader. **Edit/Update it; do not Add a duplicate.**
 
+The GitHub 1.6.0 package is prepared independently of Steam. After verifying its
+checksum, use **Update Data** on item 3805091756 with the extracted inner mod folder.
+GitHub release automation does not log into Steam or upload Workshop content.
+Updated bilingual listing text is in [WORKSHOP_DESCRIPTION](WORKSHOP_DESCRIPTION.md).
+
 ## Another Windows computer / 换电脑上传
 
 1. Open [latest GitHub Release](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/latest).

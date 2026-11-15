@@ -1,5 +1,18 @@
 # Changelog / 更新日志
 
+## 1.6.0 — 2026-11-15
+
+- Refactor the client pipeline into registry, device, spatial, hook, loop and action-confirmation modules; retain dynamic native definitions and client-only scope.
+- Audit DST762172/build26474873 (506 definitions, 503 events), including all14 additions and their actual producer side; ignore commented-out Lua when counting references.
+- Observe Shrouden beam loop/bigloop only when the native handle reports playing; preserve conditional remote visibility limits.
+- Track ten native weather loops without _LP suffixes; fix same-handle replacement, approaching active distant loops and removed-entity cleanup while output is disabled.
+- Cancel server-pause and deactivated-player output immediately; use static scheduling for live settings and output gates, and prevent stale tails after device changes.
+- Preserve action identity, failed/cancelled replacement and final tool-hit snapshots; bound repeated work acknowledgements by native replicated state, target and time.
+- Make melee/hurt approximations explicit and OFF by default. Fix real weapon lookup without invobject; remove unproven armour tags and generic flesh guesses.
+- Rebind/clean up same-VM observers safely, avoid host hungry duplication, and retain native/compatibility output exclusivity.
+- Unify Chinese/English prompts/logs and preserve config keys; rewrite both READMEs with installation, settings, architecture, migration and Workshop links.
+- Exact waveforms, physical controller routes and remote beam-handle visibility remain unverified; GitHub publication does not update Workshop automatically.
+
 ## 1.5.0 — 2026-09-20
 
 - 总体、工具、战斗、危险、玩家、Boss、环境、界面和循环分别支持强度/时长，0%–200%，步长 5%，默认 100%。

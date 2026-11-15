@@ -51,10 +51,11 @@ local function Entity()
 end
 
 local function Harness(effects)
-    local h = { state = {}, allowed = true, attempts = {}, records = {}, starts = 0 }
+    local h = { state = {}, allowed = true, attempts = {}, records = {}, starts = 0, cleanups = {} }
     h.api =
     {
         GetState = function() return h.state end,
+        AddCleanup = function(fn) h.cleanups[#h.cleanups + 1] = fn end,
         GetEffect = function(event) return effects[event] end,
         CanObserve = function()
             if h.gate_error then error("gate unavailable") end
@@ -206,4 +207,26 @@ partial_inst.SoundEmitter = nil
 assert(pcall(function() partial_inst:Tick() end))
 partial_inst.SoundEmitter = {}
 assert(pcall(function() partial_inst:Tick() end))
+
+-- Old prefab callbacks persist in the engine across a development reload.
+local retired = Harness(both)
+retired.state.installed = true
+assert(module.Install(retired.api))
+local old_callback = registrations[#registrations]
+local old_fx = Entity()
+old_callback(old_fx)
+for _, cleanup in ipairs(retired.cleanups) do cleanup() end
+retired.state.installed = false
+assert(old_fx.tasks[1].cancelled and old_fx._dst_haptics_loop_observer_task == nil)
+local fresh = Harness(both)
+fresh.state.installed = true
+assert(module.Install(fresh.api))
+local new_callback = registrations[#registrations]
+local new_fx = Entity()
+new_fx.playing.loop = true
+old_callback(new_fx)
+new_callback(new_fx)
+new_fx:Tick()
+assert(#new_fx.tasks == 1 and fresh.starts == 1 and retired.starts == 0,
+    "retired observer callback claimed a new entity after reload")
 print("haptic observer tests passed (simulated engine; no remote visibility or motor claim)")

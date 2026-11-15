@@ -40,10 +40,26 @@ function Observers.Install(api)
     end
 
     state._dst_haptics_observers_installed = true
+    local instances = G.setmetatable({}, { __mode = "k" })
+    if api.AddCleanup ~= nil then
+        api.AddCleanup(function()
+            for inst in G.pairs(instances) do
+                if inst._dst_haptics_loop_observer_owner == state then
+                    local task = inst._dst_haptics_loop_observer_task
+                    if task ~= nil and task.Cancel ~= nil then task:Cancel() end
+                    inst._dst_haptics_loop_observer_task = nil
+                    inst._dst_haptics_loop_observer_owner = nil
+                end
+            end
+        end)
+    end
     AddPrefabPostInit("shrouden_optic_blast_fx", function(inst)
+        if state.installed == false then return end
         if inst._dst_haptics_loop_observer_task ~= nil or type(inst.DoPeriodicTask) ~= "function" then
             return
         end
+        inst._dst_haptics_loop_observer_owner = state
+        instances[inst] = true
 
         -- Entity-owned tasks are cancelled by the engine on removal. The
         -- adapter's common loop manager owns false/removal/output-gating cleanup.

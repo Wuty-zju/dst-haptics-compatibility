@@ -1,8 +1,8 @@
 name = "DST Haptics Compatibility / 手柄震动兼容"
 description = [[
-为 Windows 手柄提供兼容震动输出。读取当前 haptics.lua，保留真实声音事件与经过核对的客户端动作反馈；支持 Xbox、DS4、DualSense 及局内设置。默认使用严格受击事件，近似受击补偿可单独开启。
+为 Windows 手柄提供兼容震动输出。读取当前 haptics.lua，保留真实声音事件与经过核对的客户端动作反馈；支持 Xbox、DS4、DualSense 及局内设置。默认严格事件；近战与受击近似补偿可单独开启。
 
-Compatibility rumble for Windows controllers using the current haptics.lua, real sound events and audited client action feedback. Supports Xbox, DS4, DualSense and live settings. Approximate hurt fallback is optional and OFF by default.
+Compatibility rumble for Windows controllers using the current haptics.lua, real sound events and audited client action feedback. Supports Xbox, DS4, DualSense and live settings. Melee and hurt estimates are optional and OFF by default.
 ]]
 author = "wuty"
 icon_atlas = "modicon.xml"

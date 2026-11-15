@@ -2,6 +2,11 @@
 
 Code support means DST recognizes the device type and exposes it through `TheInputProxy`. Physical acceptance additionally requires a real motor test on that route; Lua cannot infer it.
 
+1.6.0 (2026-11-15): current-native data and simulated integration checks were rerun,
+including strict defaults, server pause and beam observers. No new game launch or
+physical motor acceptance was performed for 1.6.0. All physical pending routes below
+remain pending. The retained November 7 load record is for 1.5.0, not 1.6.0.
+
 2026-09-20 / 1.5.0 historical release record: DualSense enumeration and successful game loading were recorded in the progress notes, but the original enumeration output/log from that day was not archived. The user authorized reduced physical testing. USB/Bluetooth subjective feel tests remain unperformed; enumeration and successful loading do not prove physical motor response. No DualShock 4 was found in that historical query.
 
 2026-11-15 evidence refresh: a retained November 7 client log directly shows Workshop item 3805091756 loading version 1.5.0 and 506 definitions / 503 unique events. It was copied and hashed locally. This is a loading observation from that earlier session, not a new physical test. See [evidence provenance](maintenance/EVIDENCE.md).

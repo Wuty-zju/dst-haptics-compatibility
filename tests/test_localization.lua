@@ -13,6 +13,7 @@ end
 assert(text ~= nil)
 local samples =
 {
+    restart_required = {},
     initialized = { 503, 506, 3 },
     load_failed = { "test" }, hook_failed = { "test" },
     native_suppressed = {}, missing_proxies = {}, settings_title = {},
@@ -72,6 +73,7 @@ for _, name in ipairs({ "compatibility", "language", "output_mode", "strength", 
 end
 assert(options.language.default == "zh")
 assert(options.hurt_fallback.default == false)
+assert(options.combat_fallback.default == false)
 assert(options.hurt_fallback.options[1].data == true and options.hurt_fallback.options[2].data == false)
 assert(string.find(options.hurt_fallback.hover, "不能证明", 1, true))
 print("localization tests passed: " .. count .. " bilingual keys, format contracts and saved configuration keys")

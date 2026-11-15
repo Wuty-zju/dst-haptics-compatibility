@@ -29,7 +29,7 @@ local ok, message = G.pcall(function()
     local api = Adapter.Install(config, LoadLocalModule)
     if api == nil then return end
     local ClientActionBridge = LoadLocalModule("scripts/client_action_bridge.lua")
-    ClientActionBridge.Install(api)
+    api.AddCleanup(ClientActionBridge.Install(api))
     LoadLocalModule("scripts/haptic_observers.lua").Install(api)
     local RuntimeSettings = LoadLocalModule("scripts/runtime_settings.lua")
     RuntimeSettings.Install(api, config, modname or "dst_haptics_compat", ReadRuntimeConfig,

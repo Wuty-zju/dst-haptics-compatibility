@@ -1,4 +1,6 @@
-# Steam Workshop Listing / 创意工坊页面文案
+# Workshop listing / 创意工坊文案 — 1.6.0
+
+Existing item: https://steamcommunity.com/sharedfiles/filedetails/?id=3805091756
 
 ## Title
 
@@ -6,32 +8,37 @@ DST Haptics Compatibility / 手柄震动兼容
 
 ## Tags
 
-`utility`, `client_only_mod`
+Select only relevant labels offered by the official uploader: client-only, utility.
+Keep the existing item ID. This document does not itself upload content.
 
-## Description
+## Description — paste into Steam
 
-纯客户端 Windows 手柄震动兼容层。动态读取当前版本 DST 的 `haptics.lua`，将原版已经定义的工具、战斗、受击、Boss、环境和 UI/HUD Haptic 事件桥接到可工作的 `TheInputProxy` 输出。
+[h2]原版事件，兼容输出[/h2]
+纯客户端Windows手柄震动兼容Mod，读取当前DST的haptics.lua，通过TheInputProxy输出可观察的原版事件。支持Xbox/XInput、DualShock4与DualSense；服务器和其他玩家无需安装。
 
-- 不监听 A/X 键制造假震动；砍伐、采矿与近战材质命中等待原版服务器动作结果。
-- 保留原版 `vibration_intensity`、`player_only`、category、音量/参数、空间距离和循环生命周期。
-- 支持 Xbox/XInput、DualShock 4、PS5/DualSense，以及由 Steam Input 暴露给 DST 的兼容设备。
-- 总体及工具、战斗、危险、玩家、Boss、环境、UI、循环均支持强度/时长 0%–200%、每档 5%；设备专用适配默认开启，可回退通用响应。
-- 提供用户主动触发的弱/中/强校准脉冲，用于验证 Xbox、DS4、DualSense 当前连接路径。
-- Compatibility、Native、Diagnostic 三种输出模式，避免未来 Klei 修复后双重震动。
-- 服务器和其他玩家无需安装，不修改存档、伤害、RPC 或玩法逻辑。
+[list]
+[*]真实声音、经过审计的工具动作确认与具名声音生命周期，不监听A/X按键补震。
+[*]保留原版相对强度、player_only和分类；世界事件平滑衰减，本地UI不走世界距离。
+[*]总体/分类强度与时长0%–200%，每档5%；设备适配、柔和/强力响应与空间范围可调。
+[*]F8或手柄暂停菜单打开局内设置；中文/英文提示即时切换。
+[*]Compatibility/Native/Diagnostic模式互斥；暂停、断连、声音替换和退出会清理反馈。
+[*]近战与受击近似补偿默认关闭。开启才按复制信号估计，不保证原版实际播放了对应声音。
+[/list]
 
-Client-only Windows controller haptics compatibility layer. It dynamically reads the installed DST `haptics.lua` and bridges the native tool, combat, hurt, Boss, environment and UI/HUD events to the working `TheInputProxy` output path.
+[h2]范围和限制[/h2]
+1.6核对DST762172/build26474873的506条定义、503个唯一事件。事件在表中不代表远端触发一定可观察。
+部分服务器声音绕过客户端Lua；新增光束只读真实loop/bigloop句柄，仍需远程实机确认可见性。
+100%表示兼容包络基准，不是原始波形逐采样复刻。DS4/DS5依赖DST或Steam Input提供rumble；不提供自适应扳机或DualSense高频触觉。完整物理连接矩阵尚未验收。
 
-- No A/X-button rumble and no unconfirmed animation guesses.
-- Preserves native intensity order, `player_only`, category, sound parameters/volume, listener-relative distance and named-loop lifecycle.
-- Supports Xbox/XInput, DualShock 4 and PS5/DualSense through DST/Steam Input's controller output path.
-- Fine-grained in-world levels plus Compatibility, Native and no-motor Diagnostic modes.
-- No server installation, save changes, gameplay RPCs or combat modifications.
+[h2]Installation and settings[/h2]
+Enable this client mod and DST Controller Vibration. Press F8 in-world, or use the controller pause-menu shortcut. Avoid a duplicate manual copy.
 
-Keep DST's own Controller Vibration setting enabled when using Compatibility mode. If Klei restores native Windows haptics, switch Output Mode to Native or disable Vibration Compatibility.
+The mod dynamically reads native haptics.lua and routes observable sounds and audited tool confirmations to TheInputProxy. Melee/hurt estimates are separate and OFF by default. Native and Compatibility output never intentionally run together.
 
-Source and issue tracking: https://github.com/Wuty-zju/dst-haptics-compatibility
+Core envelopes, spatial falloff and controller curves are approximations. Some server-only one-shots have no provable client signal. Automated tests are not physical motor acceptance. If Klei restores native output, select Native or disable compatibility.
 
-## 1.5.0 Change Note
+[url=https://github.com/Wuty-zju/dst-haptics-compatibility]Source, documentation and issues[/url]
 
-Added independent 0%–200% intensity/duration controls in 5% steps, optional device adaptation, independent loop envelope mixing, pause/disconnect cancellation, cached native profiles, separate Chinese/English guides and minimal original artwork. Physical controller acceptance remains pending; 100% refers to the native-compatible baseline, not sample-exact motor output.
+## 1.6.0 Change note
+
+Refactored native registry/output/spatial/hooks/loops; audited 14 new events and actual producer sides; added conservative beam-handle observation; fixed weather loops, pause/player/device cancellation, action identity and observer reinstall. Strict defaults replace unproven combat/hurt guesses with optional estimates. Updated bilingual live settings and both READMEs. Physical route acceptance remains pending.

@@ -28,6 +28,7 @@ function RuntimeSettings.Install(api, config, modname, read_config, L)
     end
 
     local function OpenSettings()
+        if state ~= nil and state.installed == false then return end
         if G.TheFrontEnd == nil then
             return
         end
@@ -45,6 +46,7 @@ function RuntimeSettings.Install(api, config, modname, read_config, L)
 
     local function InstallPauseShortcut(path)
         AddClassPostConstruct(path, function(screen)
+            if state ~= nil and state.installed == false then return end
             if screen._dst_haptics_settings_shortcut then
                 return
             end
@@ -52,7 +54,7 @@ function RuntimeSettings.Install(api, config, modname, read_config, L)
 
             local original_control = screen.OnControl
             screen.OnControl = function(self, control, down)
-                if not down and control == G.CONTROL_MENU_MISC_2 then
+                if (state == nil or state.installed ~= false) and not down and control == G.CONTROL_MENU_MISC_2 then
                     OpenSettings()
                     return true
                 end
@@ -62,7 +64,8 @@ function RuntimeSettings.Install(api, config, modname, read_config, L)
             local original_help = screen.GetHelpText
             screen.GetHelpText = function(self)
                 local text = original_help ~= nil and original_help(self) or ""
-                if G.TheInput ~= nil and G.TheInput.ControllerAttached ~= nil and G.TheInput:ControllerAttached() then
+                if (state == nil or state.installed ~= false) and G.TheInput ~= nil
+                    and G.TheInput.ControllerAttached ~= nil and G.TheInput:ControllerAttached() then
                     local id = G.TheInput:GetControllerID()
                     local prompt = G.TheInput:GetLocalizedControl(id, G.CONTROL_MENU_MISC_2)
                         .. " "
@@ -80,11 +83,16 @@ function RuntimeSettings.Install(api, config, modname, read_config, L)
     -- Keyboard access is useful when Steam Input has temporarily switched the
     -- active device. Controller users can use MENU_MISC_2 from the pause menu.
     if G.TheInput ~= nil and G.TheInput.AddKeyUpHandler ~= nil and G.KEY_F8 ~= nil then
-        G.TheInput:AddKeyUpHandler(G.KEY_F8, function()
+        local handler = G.TheInput:AddKeyUpHandler(G.KEY_F8, function()
             if G.ThePlayer ~= nil and G.TheFrontEnd ~= nil then
                 OpenSettings()
             end
         end)
+        if api.AddCleanup ~= nil then
+            api.AddCleanup(function()
+                if handler ~= nil and handler.Remove ~= nil then handler:Remove() end
+            end)
+        end
     end
 
     -- The game's ordinary scheduler stops on server pause. Settings saved from

@@ -25,6 +25,8 @@ for _, name in ipairs(axes) do
     end
 end
 assert(Config.Read(function() end).controller_adaptation == true)
+assert(Config.Read(function() end).hurt_fallback == false)
+assert(Config.Read(function() end).combat_fallback == false)
 assert(Config.Read(function(key) if key == "controller_adaptation" then return false end end).controller_adaptation == false)
 for _, bad in ipairs({ "invalid", 0/0, -1, 3 }) do
     local value = Config.Read(function(key) if key == "duration" then return bad end end).duration

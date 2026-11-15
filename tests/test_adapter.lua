@@ -628,16 +628,6 @@ local stops_before_unload = stop_count
 world.onremove()
 assert(stop_count == stops_before_unload + 1, "world unload did not stop all vibration")
 
--- Clean shutdown keeps a later mod's wrapper and turns our nested hook inert.
-local later_wrapper = SoundEmitter.PlaySound
-api.Shutdown()
-before = #vibrations
-now = now + 1
-SoundEmitter.PlaySound(player_emitter, "test/player")
-assert(SoundEmitter.PlaySound == later_wrapper and #vibrations == before)
-assert(native_enable_calls[#native_enable_calls] == true, "shutdown did not restore native preference")
-
-print("adapter behavior tests passed")
 
 if os.getenv("DST_HAPTICS_BENCHMARK") == "1" then
     collectgarbage("collect")
@@ -655,3 +645,14 @@ if os.getenv("DST_HAPTICS_BENCHMARK") == "1" then
     elapsed = os.clock() - started
     print(string.format("BENCH mixer loops=64 samples=10000 elapsed=%.6fs per_sample=%.3fus", elapsed, elapsed * 100))
 end
+
+-- Clean shutdown keeps a later mod's wrapper and turns our nested hook inert.
+local later_wrapper = SoundEmitter.PlaySound
+api.Shutdown()
+before = #vibrations
+now = now + 1
+SoundEmitter.PlaySound(player_emitter, "test/player")
+assert(SoundEmitter.PlaySound == later_wrapper and #vibrations == before)
+assert(native_enable_calls[#native_enable_calls] == true, "shutdown did not restore native preference")
+
+print("adapter behavior tests passed")

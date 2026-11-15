@@ -23,6 +23,10 @@ function Adapter.Install(config, LoadLocalModule)
     -- performed by development tools inside a surviving VM.
     local existing = rawget(SoundEmitter, "_dst_haptics_compat")
     if existing ~= nil and existing.installed then
+        if existing.pipeline_schema ~= 1 or type(existing.api) ~= "table" then
+            print("[DST Haptics Compat] " .. L(config.language, "restart_required"))
+            return
+        end
         existing.api.ApplyConfig(config)
         return existing.api
     end
@@ -48,6 +52,7 @@ function Adapter.Install(config, LoadLocalModule)
     local state =
     {
         installed = true,
+        pipeline_schema = 1,
         config = config,
         effects = {},
         profiles = {},
@@ -66,6 +71,7 @@ function Adapter.Install(config, LoadLocalModule)
         loop_revision = 0,
         output_was_allowed = false,
         workers = {},
+        cleanups = {},
         listener_position = nil,
         last_special_hurt_time = nil,
         metrics =
@@ -479,6 +485,12 @@ function Adapter.Install(config, LoadLocalModule)
         end,
         GetDiagnostics = function() return state.metrics end,
         GetGeneration = function() return state.generation end,
+        IsInstalled = function() return state.installed end,
+        AddCleanup = function(callback)
+            if type(callback) ~= "function" then return false end
+            state.cleanups[#state.cleanups + 1] = callback
+            return true
+        end,
         ShouldBridge = function(kind)
             return state.installed and OutputMode() == "compatibility"
                 and state.config[kind .. "_fallback"] == true
@@ -504,6 +516,8 @@ function Adapter.Install(config, LoadLocalModule)
             state.generation, state.loop_revision = state.generation + 1, state.loop_revision + 1
             state.loops = {}
             state.pending_test = nil
+            for i = #state.cleanups, 1, -1 do pcall(state.cleanups[i]) end
+            state.cleanups = {}
             pcall(function() G.TheInputProxy:StopVibration() end)
             if state.unhook ~= nil then state.unhook() end
             for _, task in pairs(state.workers) do

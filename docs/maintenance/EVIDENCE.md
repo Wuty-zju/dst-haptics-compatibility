@@ -16,6 +16,9 @@
 | E09 | Xbox底层输出曾成功 | 用户提供的历史实测事实 | XInputSetState 与 TheInputProxy:AddVibration 成功；不是本次完整设备/玩法验收 |
 | E10 | 完整真实硬件矩阵未完成 | 明确保留的未验收项 | [硬件矩阵](../HARDWARE_MATRIX.md)；DS4/DS5代码路径测试和枚举不代替实际震动 |
 | E11 | 旧工作材料移位后内容未变 | 当次逐文件移动后hash核对 | archive/2026-11-15/manifest.json；4,363文件，305,882,850字节，只归档未永久删除 |
+| E12 | 1.6按有效代码重新审计：406唯一event有字面引用，97没有 | 11月15日排除Lua注释后重新运行 | [14新增事件触发路径](../audit/1.6.0-trigger-paths.md)；不覆盖历史407/96原始报告 |
+| E13 | 当前Steam build26474873被官方接口确认为最新可列出版本 | 11月15日UpToDateCheck直接响应 | success/up_to_date/version_is_listable均true；本地pr1-merge-review/steam-up-to-date.json |
+| E14 | 1.6重构的原版数据、集成与语言回归 | 新版本审核和CI | [1.6审核](../reports/1.6.0-review.md)；光束远程句柄可见性和物理体感尚未实测 |
 
 ## 输入和成品哈希
 

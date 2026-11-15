@@ -262,7 +262,8 @@ function Bridge.Install(api)
                 work_contexts[inst] = nil
             end
         end)
-        local monitor_task = player:DoPeriodicTask(0.10, function(inst)
+        local monitor_periodic = player.DoStaticPeriodicTask or player.DoPeriodicTask
+        local monitor_task = monitor_periodic(player, 0.10, function(inst)
             if not IsInstalled() or inst ~= G.ThePlayer or not IsValid(inst) then return end
             -- funnyidle's audited hungry branch plays this exact event. Its
             -- state hash alone also covers shivering/overheating/sanity idles;
