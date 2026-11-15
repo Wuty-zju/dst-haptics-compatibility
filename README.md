@@ -75,6 +75,8 @@ DS4、DS5 的实际震动需要游戏或 Steam Input 提供对应输出通道。
 
 ## 开发与维护
 
+[当前状态](docs/STATUS.md) · [项目导航](docs/INDEX.md) · [多智能体协作](docs/maintenance/MULTI_AGENT.md) · [证据索引](docs/maintenance/EVIDENCE.md)
+
 [1.5.0 计划](docs/PLAN-1.5.0.md) · [开发记录](docs/notes/1.5.0-progress.md) · [架构](docs/ARCHITECTURE.md) · [测试](docs/TESTING.md) · [创意工坊分发](docs/STEAM_WORKSHOP.md)
 
 仓库不分发 Klei 原版脚本和原始波形资源。图标为原创线条设计，可编辑源文件位于 `assets/icon.svg`。

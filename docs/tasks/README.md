@@ -1,0 +1,18 @@
+# 任务与交接 / Tasks and handoffs
+
+当前总入口：[STATUS](../STATUS.md)。待开发顺序：[ROADMAP](../ROADMAP.md)。
+
+有实质多文件实现或并行写入时，复制 [TEMPLATE](TEMPLATE.md)，保存为
+`YYYY-MM-DD-short-task-name.md`，登记唯一主协调者、基线和文件所有权。
+小修不必建立繁重流程，可在提交/PR 中记录同样的信息。
+
+状态使用：`proposed → active → review → verified → done`，受阻时记 `blocked`
+及具体原因。`verified` 必须有证据；SKIP 不能代替 PASS。已完成任务保持原文件，
+不反复搬动路径；目录索引把活跃任务与历史任务分开即可。
+
+| 任务 | 状态 | 协调者 | 可写范围 |
+|---|---|---|---|
+| [2026-11-15 工作区整理](2026-11-15-workspace-maintenance.md) | 维护交付，结果见任务 | 当前主对话 | 文档、项目 agent 配置、维护工具、CI；运行时代码只读 |
+
+多个主对话开始新工作前先登记任务并检查现有可写范围。新任务未进入各自工作树前，
+由协调者串行登记，避免任务索引本身发生并行覆盖。

@@ -56,6 +56,11 @@ Lua cannot send DS4/DS5 USB or Bluetooth HID reports. Physical output on those d
 
 The game ships 1722 mono 16-bit, 882 Hz haptic WAVs, but Lua exposes neither sample playback nor motor-state feedback. The mod uses measured RMS envelopes for core families and semantic multi-pulse envelopes elsewhere. It preserves event semantics, relative intensity, broad duration/rhythm and lifecycle; it does not claim sample-identical Klei waveforms.
 
+The 1722 count describes the September 2026 resource snapshot, not a permanent
+engine constant. The [November snapshot](audit/DST-Haptics-Snapshot-2026-11-15.md)
+contains 1762 WAVs and 506 definitions / 503 unique events. Existing measured
+envelopes were not re-calibrated against all new assets during workspace maintenance.
+
 ## 1.5.0 tuning and lifecycle
 
 Native profiles are cached once. A shared configuration reader supplies startup and live settings. Global, category and applicable semantic intensity/duration axes are independently bounded to 0..2; the UI exposes 0.05 steps. Device compensation is applied to the baseline pulse before user duration scaling, preserving even 5% settings. Disabling controller adaptation selects the generic response.

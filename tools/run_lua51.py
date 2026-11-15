@@ -30,15 +30,11 @@ if deps is None:
 
 mod_root = args.mod_root or first_existing([
     PROJECT_ROOT if (PROJECT_ROOT / "modinfo.lua").exists() else None,
-    PROJECT_ROOT / "work" / "dst_haptics_compat",
-    PROJECT_ROOT / "dst_haptics_compat",
 ])
 if mod_root is not None:
     os.environ["DST_HAPTICS_MOD_ROOT"] = str(mod_root.resolve())
 if args.original_scripts is not None:
     os.environ["DST_ORIGINAL_SCRIPTS"] = str(args.original_scripts.resolve())
-elif (PROJECT_ROOT / "work" / "original_scripts" / "scripts").exists():
-    os.environ["DST_ORIGINAL_SCRIPTS"] = str((PROJECT_ROOT / "work" / "original_scripts" / "scripts").resolve())
 
 os.add_dll_directory(str(deps))
 lua = ctypes.WinDLL(str(deps / "lua51Original.dll"))

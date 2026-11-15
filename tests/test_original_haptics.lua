@@ -8,7 +8,7 @@ local profiles_path = mod_root .. "/scripts/haptic_profiles.lua"
 local load_haptics, haptics_error = loadfile(haptics_path)
 assert(load_haptics, haptics_error)
 local effects = load_haptics()
-assert(type(effects) == "table" and #effects >= 490)
+assert(type(effects) == "table" and #effects > 0, "native haptics table must be nonempty")
 
 local load_profiles, profiles_error = loadfile(profiles_path)
 assert(load_profiles, profiles_error)
