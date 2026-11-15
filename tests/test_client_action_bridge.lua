@@ -7,6 +7,8 @@ local queued, emitted, preview_calls = {}, {}, {}
 local game_time, generation = 10, 0
 local flags = { combat = false, hurt = false }
 local special_hurt, can_observe = false, true
+local installed, authoritative_state = true, "idle"
+function hash(name) return "hash:" .. name end
 function GetTime() return game_time end
 function AddStategraphPostInit(name, fn) assert(name == "wilson_client"); stategraph_postinit = fn end
 function AddPrefabPostInit(name, fn) assert(name == "world"); world_postinit = fn end
@@ -32,6 +34,7 @@ local api =
     ShouldBridge = function(kind) return flags[kind] == true end,
     GetGeneration = function() return generation end,
     CanObserve = function() return can_observe end,
+    IsInstalled = function() return installed end,
     HasRecentSpecialHurt = function() return special_hurt end,
     -- GetState is deliberately absent: the bridge API permits this.
 }
@@ -69,10 +72,27 @@ player.replica =
 player.sg = { HasStateTag = function(_, tag) return state_tags[tag] == true end }
 player.GetBufferedAction = function(self) return self.bufferedaction end
 player.DoTaskInTime = function(_, delay, fn) queued[#queued + 1] = { delay = delay, fn = fn } end
-player.DoPeriodicTask = function(self, _, fn) self.monitor = fn end
-player.ListenForEvent = function(self, event, fn)
-    self.listeners = self.listeners or {}; self.listeners[event] = fn
+local monitor_tasks = {}
+player.DoPeriodicTask = function(self, _, fn)
+    self.monitor = fn
+    local task = { fn = fn, Cancel = function(self) self.cancelled = true end }
+    monitor_tasks[#monitor_tasks + 1] = task
+    return task
 end
+player.ListenForEvent = function(self, event, fn)
+    self.callbacks = self.callbacks or {}; self.callbacks[event] = self.callbacks[event] or {}
+    self.callbacks[event][#self.callbacks[event] + 1] = fn
+    self.listeners = self.listeners or {}
+    self.listeners[event] = function(...)
+        for _, callback in ipairs(self.callbacks[event]) do callback(...) end
+    end
+end
+player.RemoveEventCallback = function(self, event, fn)
+    for i = #self.callbacks[event], 1, -1 do
+        if self.callbacks[event][i] == fn then table.remove(self.callbacks[event], i) end
+    end
+end
+player.player_classified = { currentstate = { value = function() return hash(authoritative_state) end } }
 player.AnimState = { IsCurrentAnimation = function(_, name) return current_anim == name end }
 player.PerformPreviewBufferedAction = function(self, ...)
     preview_calls[#preview_calls + 1] = { n = select("#", ...), ... }
@@ -85,14 +105,16 @@ end
 ThePlayer = player
 local root = assert(os.getenv("DST_HAPTICS_MOD_ROOT"), "DST_HAPTICS_MOD_ROOT is required")
 local Bridge = dofile(root .. "/scripts/client_action_bridge.lua")
-Bridge.Install(api)
+local cleanup = assert(Bridge.Install(api))
+local original_postinit = stategraph_postinit
 local function EmptyState()
     return { onenter = function(inst, ...)
         inst:PerformPreviewBufferedAction(...)
         return "state", nil, false
     end }
 end
-local sg = { states = {} }
+local sg = { name = "wilson_client", states = {} }
+player.sg.sg = sg
 for _, state in ipairs({ "chop_start", "mine_start", "hammer_start", "dig_start", "attack" }) do
     sg.states[state] = EmptyState()
 end
@@ -110,6 +132,7 @@ end
 local function Start(state, kind, invobject)
     local action = Action(kind, invobject)
     player.bufferedaction = action
+    authoritative_state = string.lower(kind)
     sg.states[state].onenter(player)
     return action
 end
@@ -144,7 +167,8 @@ for i = 1, 3 do
     assert(emitted[#emitted].source == "server_confirmed_work")
     if i > 1 then assert(emitted[#emitted].key ~= emitted[#emitted - 1].key, "serial reset after consumption") end
 end
-ExpectNoOutput(function() Ack() end, "one acknowledgement emitted twice")
+authoritative_state = "idle"
+ExpectNoOutput(function() Ack() end, "ack outside an authoritative work state repeated output")
 Start("mine_start", "MINE", weapon); Ack(); RunQueued()
 assert(emitted[#emitted].event == "dontstarve/wilson/use_pick_rock")
 
@@ -274,13 +298,101 @@ player.listeners.attacked(player, {}); local previous_player = ThePlayer; ThePla
 ExpectNoOutput(RunQueued, "queued generic hit survived player removal")
 ThePlayer = previous_player
 
-current_anim = "hungry"; player.monitor(player)
+-- Server-initiated work repeats require a current matching state and live
+-- target; no fresh client preview is fabricated for these acknowledgements.
+for _, kind in ipairs({ "chop", "mine", "hammer", "dig" }) do
+    Start(kind .. "_start", string.upper(kind), weapon); Ack(); RunQueued()
+    local previous_key = emitted[#emitted].key
+    authoritative_state = kind .. "_start"
+    local before_repeat = #emitted
+    Ack(); RunQueued()
+    assert(#emitted == before_repeat + 1 and emitted[#emitted].key ~= previous_key)
+    authoritative_state = kind
+    before_repeat = #emitted
+    Ack(); RunQueued()
+    assert(#emitted == before_repeat + 1, kind .. " server repeat was lost after successful ClearBufferedAction")
+    player.listeners.actionfailed(player)
+end
+Start("chop_start", "CHOP", weapon); Ack(); RunQueued()
+player.bufferedaction = Action("PICK"); player:PerformPreviewBufferedAction()
+ExpectNoOutput(function() Ack(); RunQueued() end, "new unrelated preview retained the old repeat context")
+Start("chop_start", "CHOP", weapon); Ack(); RunQueued()
+game_time = game_time + 2.01
+ExpectNoOutput(function() Ack() end, "expired repeat context emitted")
+Start("chop_start", "CHOP", weapon); Ack(); RunQueued(); generation = generation + 1
+ExpectNoOutput(function() Ack() end, "repeat context survived generation change")
+Start("chop_start", "CHOP", weapon); Ack(); RunQueued(); target.valid = false
+ExpectNoOutput(function() Ack() end, "repeat context used a removed target")
+target.valid = true
+Start("chop_start", "CHOP", weapon); Ack(); RunQueued(); authoritative_state = "mine"
+ExpectNoOutput(function() Ack() end, "different authoritative state repeated old work")
+Start("chop_start", "CHOP", weapon); Ack(); RunQueued()
+local classified = player.player_classified
+player.player_classified = nil
+ExpectNoOutput(function() Ack() end, "missing classified guessed a server repeat")
+player.player_classified = classified
+
+-- Hungry is funnyidle's audited animation branch, never a guessed hungry SG.
+current_anim, authoritative_state = "hungry", "idle"
+ExpectNoOutput(function() player.monitor(player) end, "hungry animation alone was treated as authoritative")
+authoritative_state, TheWorld.ismastersim = "funnyidle", true
+api.Emit("dontstarve/wilson/hungry", player, { source = "sound" })
+ExpectNoOutput(function() player.monitor(player) end, "host duplicated its exact hungry sound")
+TheWorld.ismastersim = false
+authoritative_state = "idle"; player.monitor(player)
+authoritative_state = "funnyidle"; player.monitor(player)
 assert(emitted[#emitted].event == "dontstarve/wilson/hungry")
-ExpectNoOutput(function() player.monitor(player) end, "hungry animation emitted repeatedly")
+ExpectNoOutput(function() player.monitor(player) end, "hungry state/animation branch emitted repeatedly")
+player.player_classified = nil
+ExpectNoOutput(function() player.monitor(player) end, "missing classified guessed hungry feedback")
+player.player_classified = classified
+local native_hash = hash
+hash = nil
+ExpectNoOutput(function() player.monitor(player) end, "missing hash API guessed hungry feedback")
+hash = native_hash
+authoritative_state = "idle"; player.monitor(player)
+authoritative_state, can_observe = "funnyidle", false
+ExpectNoOutput(function() player.monitor(player) end, "disabled hungry edge emitted")
+can_observe = true
+ExpectNoOutput(function() player.monitor(player) end, "enabling replayed the old hungry edge")
 local world = {
     ListenForEvent = function(self, event, fn) self[event] = fn end,
     DoTaskInTime = function(_, _, fn) fn() end,
+    RemoveEventCallback = function(self, event, fn) if self[event] == fn then self[event] = nil end end,
 }
 world_postinit(world)
 assert(world.playeractivated ~= nil)
+
+-- Rebinding replaces observers, rather than nesting SG/preview wrappers. Old
+-- postinit callbacks/listeners cannot reclaim them after their API shuts down.
+local state_wrapper, preview_wrapper = sg.states.mine_start.onenter, player.PerformPreviewBufferedAction
+local old_monitor = player.monitor
+player.listeners.attacked(player, {}) -- queue an old API's delayed fallback
+installed = false
+local fresh_state = { installed = true }
+local fresh_api = {}
+for key, value in pairs(api) do fresh_api[key] = value end
+fresh_api.IsInstalled = nil -- exercise the GetState().installed fallback
+fresh_api.GetState = function() return fresh_state end
+local fresh_cleanup = assert(Bridge.Install(fresh_api))
+assert(Bridge.Install(fresh_api) == fresh_cleanup, "same installation did not return its cleanup")
+original_postinit(sg) -- an old mod callback must not take back the observer
+assert(sg.states.mine_start.onenter == state_wrapper and player.PerformPreviewBufferedAction == preview_wrapper,
+    "bridge reinstall stacked wrappers")
+ExpectNoOutput(function() old_monitor(player); RunQueued() end, "old API retained an active task or hurt callback")
+local before_reinstall = #emitted
+Start("mine_start", "MINE", weapon); Ack(); RunQueued()
+assert(#emitted == before_reinstall + 1, "same-VM reinstall lost work captures or duplicated listeners")
+stategraph_postinit(sg)
+assert(sg.states.mine_start.onenter == state_wrapper, "later postinit nested the already rebound graph")
+cleanup() -- late old cleanup must preserve the fresh installation's records
+assert(monitor_tasks[1].cancelled == true and world.playeractivated == nil)
+before_reinstall = #emitted
+Start("mine_start", "MINE", weapon); Ack(); RunQueued()
+assert(#emitted == before_reinstall + 1, "old cleanup removed the new observer")
+fresh_cleanup(); fresh_cleanup()
+assert(monitor_tasks[#monitor_tasks].cancelled == true)
+ExpectNoOutput(function() Start("mine_start", "MINE", weapon); Ack(); player.monitor(player); RunQueued() end,
+    "cleaned bridge retained output side effects")
+assert(#player.callbacks.performaction == 0 and #player.callbacks.attacked == 0)
 print("client action bridge tests passed: strict defaults, explicit approximations, action identity, native weapon resolution and lifecycle")
