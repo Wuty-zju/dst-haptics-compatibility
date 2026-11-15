@@ -59,6 +59,12 @@ local POLICIES =
     end,
 }
 
+-- weather.lua supplies normalized precipitation intensity on these handles.
+for _, event in G.ipairs({ "dontstarve/AMB/rain", "rifts3/lunarhail/lunar_rainAMB",
+    "dontstarve_DLC001/common/rain_on_tree", "rifts3/lunarhail/lunarhail_on_tree" }) do
+    POLICIES[event] = function(params) return Linear(params.intensity, 1, 0) end
+end
+
 function M.GetScale(event, params)
     if type(params) ~= "table" then
         return 1, nil

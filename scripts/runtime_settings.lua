@@ -1,7 +1,6 @@
 local G = GLOBAL
 local pairs = G.pairs
 local pcall = G.pcall
-local string = G.string
 local tostring = G.tostring
 local type = G.type
 
@@ -16,8 +15,8 @@ local function SameConfig(a, b)
     return true
 end
 
-function RuntimeSettings.Install(api, config, modname, read_config)
-    if api == nil or api.ApplyConfig == nil or read_config == nil then
+function RuntimeSettings.Install(api, config, modname, read_config, L)
+    if api == nil or api.ApplyConfig == nil or read_config == nil or type(L) ~= "function" then
         return
     end
     local state = api.GetState ~= nil and api.GetState() or nil
@@ -29,12 +28,13 @@ function RuntimeSettings.Install(api, config, modname, read_config)
     end
 
     local function OpenSettings()
+        if state ~= nil and state.installed == false then return end
         if G.TheFrontEnd == nil then
             return
         end
         local ok, Screen = pcall(G.require, "screens/redux/modconfigurationscreen")
         if not ok or Screen == nil then
-            print("[DST Haptics Compat] unable to open in-world configuration: " .. tostring(Screen))
+            print("[DST Haptics Compat] " .. L(config.language, "settings_open_failed", tostring(Screen)))
             return
         end
         local active = G.TheFrontEnd:GetActiveScreen()
@@ -46,6 +46,7 @@ function RuntimeSettings.Install(api, config, modname, read_config)
 
     local function InstallPauseShortcut(path)
         AddClassPostConstruct(path, function(screen)
+            if state ~= nil and state.installed == false then return end
             if screen._dst_haptics_settings_shortcut then
                 return
             end
@@ -53,7 +54,7 @@ function RuntimeSettings.Install(api, config, modname, read_config)
 
             local original_control = screen.OnControl
             screen.OnControl = function(self, control, down)
-                if not down and control == G.CONTROL_MENU_MISC_2 then
+                if (state == nil or state.installed ~= false) and not down and control == G.CONTROL_MENU_MISC_2 then
                     OpenSettings()
                     return true
                 end
@@ -63,11 +64,12 @@ function RuntimeSettings.Install(api, config, modname, read_config)
             local original_help = screen.GetHelpText
             screen.GetHelpText = function(self)
                 local text = original_help ~= nil and original_help(self) or ""
-                if G.TheInput ~= nil and G.TheInput.ControllerAttached ~= nil and G.TheInput:ControllerAttached() then
+                if (state == nil or state.installed ~= false) and G.TheInput ~= nil
+                    and G.TheInput.ControllerAttached ~= nil and G.TheInput:ControllerAttached() then
                     local id = G.TheInput:GetControllerID()
                     local prompt = G.TheInput:GetLocalizedControl(id, G.CONTROL_MENU_MISC_2)
                         .. " "
-                        .. (config.language == "en" and "Haptics" or "震动设置")
+                        .. L(config.language, "settings_title")
                     return text ~= "" and (text .. "  " .. prompt) or prompt
                 end
                 return text
@@ -81,26 +83,39 @@ function RuntimeSettings.Install(api, config, modname, read_config)
     -- Keyboard access is useful when Steam Input has temporarily switched the
     -- active device. Controller users can use MENU_MISC_2 from the pause menu.
     if G.TheInput ~= nil and G.TheInput.AddKeyUpHandler ~= nil and G.KEY_F8 ~= nil then
-        G.TheInput:AddKeyUpHandler(G.KEY_F8, function()
+        local handler = G.TheInput:AddKeyUpHandler(G.KEY_F8, function()
             if G.ThePlayer ~= nil and G.TheFrontEnd ~= nil then
                 OpenSettings()
             end
         end)
+        if api.AddCleanup ~= nil then
+            api.AddCleanup(function()
+                if handler ~= nil and handler.Remove ~= nil then handler:Remove() end
+            end)
+        end
     end
 
-    G.scheduler:ExecutePeriodic(0.5, function()
+    -- The game's ordinary scheduler stops on server pause. Settings saved from
+    -- the pause menu must update prompts and output gating before resuming.
+    local settings_scheduler = G.staticScheduler or G.scheduler
+    local settings_task = settings_scheduler:ExecutePeriodic(0.5, function()
+        if state ~= nil and state.installed == false then return end
         local ok, values = pcall(read_config)
         if ok and type(values) == "table" and not SameConfig(config, values) then
             local previous_test = config.calibration_test
             api.ApplyConfig(values)
+            -- Keep the UI's configuration current even when ApplyConfig replaces
+            -- its own table. Resolve language on every prompt/log invocation.
+            for key, value in pairs(values) do
+                config[key] = value
+            end
             if values.calibration_test ~= previous_test
                 and values.calibration_test ~= "off"
                 and api.TestPulse ~= nil then
                 api.TestPulse(values.calibration_test)
             end
             if values.debug then
-                print(string.format(
-                    "[DST Haptics Compat] runtime settings applied: enabled=%s mode=%s controller=%s response=%s strength=%.2f",
+                print("[DST Haptics Compat] " .. L(config.language, "settings_applied",
                     tostring(values.compatibility),
                     tostring(values.output_mode),
                     tostring(values.controller_profile),
@@ -110,6 +125,7 @@ function RuntimeSettings.Install(api, config, modname, read_config)
             end
         end
     end)
+    if state ~= nil then state.runtime_settings_task = settings_task end
 end
 
 return RuntimeSettings

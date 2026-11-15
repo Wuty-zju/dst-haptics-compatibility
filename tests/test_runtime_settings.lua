@@ -14,7 +14,11 @@ end
 
 scheduler =
 {
-    ExecutePeriodic = function(_, _, fn) periodic = fn end,
+    ExecutePeriodic = function() error("runtime settings must update during server pause") end,
+}
+staticScheduler =
+{
+    ExecutePeriodic = function(_, interval, fn) assert(interval == 0.5); periodic = fn end,
 }
 
 TheInput =
@@ -55,7 +59,8 @@ local fn, err = loadfile(source)
 assert(fn, err)
 setfenv(fn, _G)
 local RuntimeSettings = fn()
-RuntimeSettings.Install(api, config, "dst_haptics_compat", function() return next_config end)
+local L = dofile(assert(os.getenv("DST_HAPTICS_MOD_ROOT")) .. "/scripts/localization.lua")
+RuntimeSettings.Install(api, config, "dst_haptics_compat", function() return next_config end, L)
 
 assert(state.runtime_settings_installed == true)
 assert(postconstructs["screens/redux/pausescreen"] ~= nil)
@@ -82,5 +87,30 @@ next_config = { language = "en", compatibility = true, strength = 0.75, calibrat
 periodic()
 assert(#applied == 1 and applied[1].strength == 0.75)
 assert(test_pulses[1] == "medium", "in-world calibration selection did not play a test pulse")
+assert(string.find(pause:GetHelpText(), "Triangle Haptics", 1, true) ~= nil,
+    "existing pause shortcut did not immediately switch language")
+periodic()
+assert(#applied == 1, "unchanged settings were reapplied after updating the UI configuration")
+
+local original_print = print
+local logs = {}
+print = function(message) logs[#logs + 1] = message end
+next_config = { language = "zh", compatibility = true, strength = 0.5, calibration_test = "medium", debug = true }
+periodic()
+assert(string.find(logs[#logs], "局内设置已应用", 1, true) ~= nil)
+assert(string.find(pause:GetHelpText(), "Triangle 震动设置", 1, true) ~= nil)
+assert(#test_pulses == 1, "language changes replayed the calibration pulse")
+next_config = { language = "en", compatibility = true, strength = 0.5, calibration_test = "medium", debug = true }
+periodic()
+assert(string.find(logs[#logs], "runtime settings applied", 1, true) ~= nil)
+
+-- A failed import uses the currently selected language too.
+pushed = {}
+package.loaded["screens/redux/modconfigurationscreen"] = nil
+package.preload["screens/redux/modconfigurationscreen"] = function() error("test import failure") end
+key_handler()
+assert(string.find(logs[#logs], "unable to open in-world haptics settings", 1, true) ~= nil)
+assert(#pushed == 0)
+print = original_print
 
 print("runtime settings tests passed")
