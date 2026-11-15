@@ -65,8 +65,10 @@ Option("response_mode", "马达响应 / Motor Response",
 Option("calibration_test", "测试脉冲 / Calibration Pulse",
     "局内选择弱、中、强播放一次测试；切回关闭后可重复。 / Select Weak, Medium or Strong in-world for one test pulse; return to OFF to repeat.",
     Choices({ { "关闭 / OFF", "off" }, { "弱 / Weak", "weak" }, { "中 / Medium", "medium" }, { "强 / Strong", "strong" } }), "off")
-Option("hurt_fallback", "受击近似补偿（非严格原版）/ Approximate Hurt Fallback",
+Option("hurt_fallback", "受击近似 / Hurt Estimate",
     "默认关闭，仅使用实际原声路径。开启后按复制的 attacked 信号估计通用受击反馈；该信号不能证明原版播放了此声音，可能与原版不同。 / OFF uses actual sound events. ON estimates generic hurt feedback from replicated attacked signals; these do not prove the native sound played and may differ from native behavior.", Toggle(), false)
+Option("combat_fallback", "近战近似 / Melee Estimate",
+    "默认关闭。开启后按服务器动作确认与距离估计近战材质反馈；不是服务器伤害确认，未知护甲会跳过。 / OFF by default. ON estimates melee feedback from action acknowledgement and range, not confirmed damage; unknown armour is skipped.", Toggle(), false)
 
 -- Preserve every saved tuning key. All axes use the same 0..200% range.
 local scales =

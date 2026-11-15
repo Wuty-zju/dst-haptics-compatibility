@@ -66,11 +66,6 @@ end
 
 local function ResolveImpactSound(target, weapon)
     if not IsValid(target) then return nil end
-    local combat = target.components ~= nil and target.components.combat or nil
-    if combat ~= nil and combat.GetImpactSound ~= nil then
-        local ok, event = pcall(combat.GetImpactSound, combat, target, weapon)
-        return ok and event or nil
-    end
     -- Other players' inventory replica can report an empty equipment table
     -- without a classified. Material tags cannot prove an item has armor, so
     -- neither an empty table nor a metal hand item proves an armor impact.

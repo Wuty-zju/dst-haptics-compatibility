@@ -38,7 +38,7 @@ foreach ($name in $runtime) {
 foreach ($readmeName in @('README.md', 'README.en.md')) {
     $readmePath = Join-Path $stage $readmeName
     $readmeText = Get-Content -LiteralPath $readmePath -Raw
-    $readmeText = [regex]::Replace($readmeText, '\]\((docs/[^)]+)\)', {
+    $readmeText = [regex]::Replace($readmeText, '\]\((docs/[^)]+|CONTRIBUTING\.md|CHANGELOG\.md|AGENTS\.md)\)', {
         param($match)
         '](' + 'https://github.com/Wuty-zju/dst-haptics-compatibility/blob/v' + $Version + '/' + $match.Groups[1].Value + ')'
     })

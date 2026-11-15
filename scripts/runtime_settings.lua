@@ -90,7 +90,8 @@ function RuntimeSettings.Install(api, config, modname, read_config, L)
     -- The game's ordinary scheduler stops on server pause. Settings saved from
     -- the pause menu must update prompts and output gating before resuming.
     local settings_scheduler = G.staticScheduler or G.scheduler
-    settings_scheduler:ExecutePeriodic(0.5, function()
+    local settings_task = settings_scheduler:ExecutePeriodic(0.5, function()
+        if state ~= nil and state.installed == false then return end
         local ok, values = pcall(read_config)
         if ok and type(values) == "table" and not SameConfig(config, values) then
             local previous_test = config.calibration_test
@@ -116,6 +117,7 @@ function RuntimeSettings.Install(api, config, modname, read_config, L)
             end
         end
     end)
+    if state ~= nil then state.runtime_settings_task = settings_task end
 end
 
 return RuntimeSettings

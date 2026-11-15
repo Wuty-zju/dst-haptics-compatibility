@@ -20,6 +20,20 @@ DEFAULT_OUT = PROJECT_ROOT / "work" / "haptics_audit"
 ENTRY_RE = re.compile(r"^\s*\{\s*event\s*=\s*\"([^\"]+)\"\s*,(.*?)\}\s*,?.*$")
 FIELD_RE = re.compile(r"(\w+)\s*=\s*(\"[^\"]*\"|true|false|-?\d+(?:\.\d+)?)")
 
+# Preserve strings (including long strings) but mask Lua comments without
+# shifting line numbers. Literal references inside disabled SG blocks are not
+# producer evidence. This remains a static reference audit, not a Lua call graph.
+LUA_TOKEN_RE = re.compile(
+    r'''"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\[(=*)\[[\s\S]*?\]\1\]|--\[(=*)\[[\s\S]*?\]\2\]|--[^\n]*'''
+)
+
+
+def strip_lua_comments(text: str) -> str:
+    return LUA_TOKEN_RE.sub(
+        lambda match: re.sub(r"[^\n]", " ", match[0]) if match[0].startswith("--") else match[0],
+        text,
+    )
+
 
 def parse_value(raw: str):
     if raw.startswith('"'):
@@ -70,7 +84,7 @@ def main():
         raise SystemExit(f"haptic WAV directory not found: {wav_root}; pass --wav-root or set DST_HAPTICS_WAV_ROOT")
     out.mkdir(parents=True, exist_ok=True)
     effects = []
-    for lineno, line in enumerate(haptics.read_text(encoding="utf-8-sig").splitlines(), 1):
+    for lineno, line in enumerate(strip_lua_comments(haptics.read_text(encoding="utf-8-sig")).splitlines(), 1):
         if line.lstrip().startswith("--"):
             continue
         match = ENTRY_RE.match(line)
@@ -86,7 +100,8 @@ def main():
         if path == haptics:
             continue
         try:
-            lines = path.read_text(encoding="utf-8-sig", errors="ignore").splitlines()
+            text = path.read_text(encoding="utf-8-sig", errors="ignore")
+            lines = strip_lua_comments(text).splitlines()
         except OSError:
             continue
         sources.append((path, lines))

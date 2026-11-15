@@ -29,6 +29,12 @@ function scheduler:ExecutePeriodic(period, fn)
     return periodic[#periodic]
 end
 
+local function TickOutputs()
+    for i = 1, #periodic do
+        if periodic[i].period == 0.085 then periodic[i].fn() end
+    end
+end
+
 local function RunDelayed()
     local pending = delayed
     delayed = {}
@@ -345,10 +351,10 @@ now = now + 1
 local loop_emitter = Emitter(near_boss)
 SoundEmitter.PlaySound(loop_emitter, "test/loop_LP", "beam", 1)
 assert(next(SoundEmitter._dst_haptics_compat.loops) ~= nil)
-periodic[1].fn()
+TickOutputs()
 assert(vibrations[#vibrations].channel == 2, "loop did not use its dedicated channel")
 SoundEmitter.SetVolume(loop_emitter, "beam", 0)
-periodic[1].fn()
+TickOutputs()
 assert(removes[#removes] == 2, "muted loop did not stop its channel")
 SoundEmitter.KillSound(loop_emitter, "beam")
 assert(next(SoundEmitter._dst_haptics_compat.loops) == nil)
@@ -359,11 +365,11 @@ SoundEmitter.PlaySound(crab_emitter, "hookline_2/creatures/boss/crabking/magic_L
 local p1, p2, p3 = SoundEmitter.SetParameter(crab_emitter, "crabmagic", "intensity", 0)
 assert(p1 == "parameter-ok" and p2 == "intensity" and p3 == 0, "SetParameter return values changed")
 before = #vibrations
-periodic[1].fn()
+TickOutputs()
 assert(#vibrations == before, "zero loop parameter still produced vibration")
 SoundEmitter.SetParameter(crab_emitter, "crabmagic", "intensity", 1)
 assert(#vibrations == before + 1, "live loop parameter did not restore vibration immediately")
-periodic[1].fn()
+TickOutputs()
 assert(#vibrations == before + 2, "live loop parameter did not persist")
 SoundEmitter.KillSound(crab_emitter, "crabmagic")
 
@@ -371,14 +377,14 @@ SoundEmitter.KillSound(crab_emitter, "crabmagic")
 api.ApplyConfig({ controller_profile = "xbox", duration = 1, loop_duration = 0.5, environment_duration = 1 })
 now = now + 1
 SoundEmitter.PlaySound(loop_emitter, "test/loop_LP", "beam", 1)
-periodic[1].fn()
+TickOutputs()
 assert(math.abs(vibrations[#vibrations].duration - 0.05) < 1e-9, "loop width ignored 50%")
 api.ApplyConfig({ loop_duration = 0 })
 before = #vibrations
-periodic[1].fn()
+TickOutputs()
 assert(#vibrations == before, "zero loop duration produced output")
 api.ApplyConfig({ loop_duration = 2 })
-periodic[1].fn()
+TickOutputs()
 assert(math.abs(vibrations[#vibrations].duration - 0.2) < 1e-9, "loop width ignored 200%")
 SoundEmitter.KillSound(loop_emitter, "beam")
 RunDelayed()
@@ -391,13 +397,13 @@ now = now + 1
 SoundEmitter.PlaySound(player_emitter, "dontstarve/characters/walter/woby/big/footstep")
 assert(#delayed > 0, "test requires a multi-pulse envelope")
 paused = true
-periodic[1].fn()
+TickOutputs()
 paused = false
 before = #vibrations
 RunDelayed()
 assert(#vibrations == before, "paused envelope resumed stale pulses")
 paused = true
-periodic[1].fn()
+TickOutputs()
 now = now + 1
 local paused_tasks = #delayed
 SoundEmitter.PlaySound(player_emitter, "dontstarve/characters/walter/woby/big/footstep")
@@ -408,7 +414,7 @@ assert(#vibrations == before, "paused event escaped after resume")
 now = now + 1
 SoundEmitter.PlaySound(player_emitter, "dontstarve/characters/walter/woby/big/footstep")
 controller_enabled = false
-periodic[1].fn()
+TickOutputs()
 controller_enabled = true
 before = #vibrations
 RunDelayed()
@@ -504,11 +510,132 @@ now = now + 1
 SoundEmitter.PlaySound(player_emitter, "dontstarve/wilson/burned")
 assert(api.HasRecentSpecialHurt(), "local special hurt was not tracked")
 
-local world = { ListenForEvent = function(self, event, fn) assert(event == "onremove"); self.onremove = fn end }
+local world =
+{
+    ListenForEvent = function(self, event, fn) self[event] = fn end,
+    DoStaticPeriodicTask = function(self, _, fn) self.static_gate = fn end,
+}
 world_postinit(world)
+world.playerdeactivated(world, player)
+before = #vibrations
+now = now + 1
+api.Emit("test/player", player, { source = "deactivated_player" })
+assert(#vibrations == before and not api.CanObserve(), "deactivated player resumed output before world removal")
+world.playeractivated(world, player)
+
+-- A true server pause does not run ordinary scheduler callbacks. The replicated
+-- event must cancel now; resuming cannot resurrect an already queued tail.
+now = now + 1
+SoundEmitter.PlaySound(player_emitter, "dontstarve/characters/walter/woby/big/footstep")
+assert(#delayed > 0)
+local pause_stops = stop_count
+world.serverpauseddirty(world, { pause = true })
+assert(stop_count == pause_stops + 1, "server pause did not cancel immediately")
+before = #vibrations
+SoundEmitter.PlaySound(player_emitter, "test/player")
+assert(#vibrations == before, "server pause was ignored while IsPaused was false")
+world.serverpauseddirty(world, { pause = false })
+RunDelayed()
+assert(#vibrations == before, "server pause replayed stale tails")
+world.serverpauseddirty(world, { pause = true })
+assert(api.TestPulse("weak"))
+TickOutputs()
+assert(#vibrations == before, "user calibration ignored pause")
+world.serverpauseddirty(world, { pause = false })
+TickOutputs()
+assert(#vibrations == before + 1, "explicit calibration did not resume once")
+TickOutputs()
+assert(#vibrations == before + 1, "explicit calibration repeated")
+world.serverpauseddirty(world, { pause = true })
+assert(api.TestPulse("weak"))
+now = now + 11
+world.serverpauseddirty(world, { pause = false })
+TickOutputs()
+assert(#vibrations == before + 1, "expired calibration replayed")
+
+local Profiles = LoadLocalModule("scripts/haptic_profiles.lua")
+local function AddEffect(effect)
+    api.GetState().effects[effect.event] = effect
+    api.GetState().profiles[effect.event] = Profiles.Get(effect)
+end
+AddEffect({ event = "test/ui/owned", vibration = true, vibration_intensity = 1,
+    category = "UI", player_only = true })
+before = #vibrations
+SoundEmitter.PlaySound(Emitter(other_player), "test/ui/owned")
+assert(#vibrations == before, "UI bypassed player_only ownership")
+SoundEmitter.PlaySound(frontend_emitter, "test/ui/owned")
+assert(#vibrations > before, "verified local UI emitter was rejected")
+AddEffect({ event = "test/disabled_LP", vibration = false, category = "BOSS" })
+SoundEmitter.PlaySound(loop_emitter, "test/disabled_LP", "disabled")
+assert(next(api.GetState().loops) == nil, "disabled native loop was registered")
+
+-- Same-frame native calls at different volumes must not lose the stronger call.
+now = now + 1
+before = #vibrations
+SoundEmitter.PlaySound(player_emitter, "test/player", nil, 0.7)
+SoundEmitter.PlaySound(player_emitter, "test/player", nil, 0.8)
+assert(#vibrations == before + 2 and vibrations[#vibrations].magnitude > vibrations[#vibrations - 1].magnitude)
+
+-- Register distant loops so that walking into range works without another PlaySound.
+local distant = Emitter(far_boss)
+SoundEmitter.PlaySound(distant, "test/loop_LP", "moving", 1)
+before = #vibrations
+TickOutputs()
+assert(#vibrations == before)
+far_boss.Transform = Transform(12, 0)
+TickOutputs()
+assert(#vibrations > before, "approaching an already-playing loop did not restore feedback")
+SoundEmitter.PlaySound(distant, "ordinary/unmatched/replacement", "moving", 1)
+assert(next(api.GetState().loops) == nil, "a replacement sound inherited the previous haptic loop")
+SoundEmitter.PlaySound(distant, "test/loop_LP", "removed", 1)
+far_boss.IsValid = function() return false end
+controller_enabled = false
+TickOutputs()
+assert(next(api.GetState().loops) == nil, "disconnected output retained a removed entity")
+controller_enabled = true
+far_boss.IsValid = function() return true end
+far_boss.Transform = Transform(100, 0)
+
+-- Only a live native handle can start an observed loop; the same key is shared
+-- with the sound hook, including parameter and volume state.
+loop_emitter.playing.observed = false
+assert(not api.ObserveLoop("test/loop_LP", loop_emitter, near_boss, "observed"))
+loop_emitter.playing.observed = true
+assert(api.ObserveLoop("test/loop_LP", loop_emitter, near_boss, "observed"))
+local observed_key, observed_record = next(api.GetState().loops)
+observed_record.volume = 0.25
+assert(api.ObserveLoop("test/loop_LP", loop_emitter, near_boss, "observed"))
+assert(api.GetState().loops[observed_key] == observed_record and observed_record.volume == 0.25)
+SoundEmitter.KillSound(loop_emitter, "observed")
+assert(next(api.GetState().loops) == nil)
+
+-- Weather loops have audited lifecycle metadata even without an _LP suffix.
+TheWorld = world
+world.Transform = Transform(500, 500)
+AddEffect({ event = "dontstarve/AMB/rain", vibration = true, vibration_intensity = 1 })
+local rain = Emitter(world)
+SoundEmitter.PlaySound(rain, "dontstarve/AMB/rain", "rain", 1)
+SoundEmitter.SetParameter(rain, "rain", "intensity", 0)
+before = #vibrations
+TickOutputs()
+assert(#vibrations == before, "zero precipitation produced rumble")
+SoundEmitter.SetParameter(rain, "rain", "intensity", 1)
+assert(#vibrations > before, "world-attached rain was incorrectly distance-filtered")
+SoundEmitter.KillAllSounds(rain)
+assert(next(api.GetState().loops) == nil)
+
 local stops_before_unload = stop_count
 world.onremove()
 assert(stop_count == stops_before_unload + 1, "world unload did not stop all vibration")
+
+-- Clean shutdown keeps a later mod's wrapper and turns our nested hook inert.
+local later_wrapper = SoundEmitter.PlaySound
+api.Shutdown()
+before = #vibrations
+now = now + 1
+SoundEmitter.PlaySound(player_emitter, "test/player")
+assert(SoundEmitter.PlaySound == later_wrapper and #vibrations == before)
+assert(native_enable_calls[#native_enable_calls] == true, "shutdown did not restore native preference")
 
 print("adapter behavior tests passed")
 

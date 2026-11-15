@@ -28,6 +28,8 @@ PORTABLE_TESTS = (
     "test_haptic_config.lua",
     "test_haptic_mixer.lua",
     "test_runtime_settings.lua",
+    "test_haptic_observers.lua",
+    "test_localization.lua",
 )
 DEFAULT_DLL_DIR = Path(
     r"C:\Program Files (x86)\Steam\steamapps\common\Don't Starve Together\mods\Luajit\deps"

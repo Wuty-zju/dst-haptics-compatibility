@@ -21,11 +21,13 @@ function M.Read(read)
         response_mode = read("response_mode", true) or "detail",
         calibration_test = read("calibration_test", true) or "off",
         debug = read("debug", true) == true,
+        hurt_fallback = read("hurt_fallback", true) == true,
+        combat_fallback = read("combat_fallback", true) == true,
     }
     for i = 1, #numeric do
         local name = numeric[i]
         local value = read(name, true)
-        if type(value) ~= "number" or value ~= value then
+        if type(value) ~= "number" or value ~= value or value == math.huge or value == -math.huge then
             value = 1
         elseif value < 0 then
             value = 0

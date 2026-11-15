@@ -1,5 +1,21 @@
 local M = {}
 
+-- These native weather handles are sustained without an _LP suffix. This is
+-- lifecycle metadata from components/weather.lua, not an event allow-list.
+local AMBIENT_LOOPS =
+{
+    ["dontstarve/amb/rain"] = true,
+    ["rifts3/lunarhail/lunar_rainamb"] = true,
+    ["rifts3/lunarhail/lunarhail_on_tree"] = true,
+    ["rifts3/lunarhail/hail_on_umbrella"] = true,
+    ["dontstarve_dlc001/common/rain_on_tree"] = true,
+    ["dontstarve/amb/caves/rain"] = true,
+    ["dontstarve/cave/cave_rain_on_umbrella"] = true,
+    ["dontstarve/rain/rain_on_umbrella"] = true,
+    ["meta4/winona_teleumbrella/rain_on_teleumbrella"] = true,
+    ["meta4/winona_teleumbrella/hail_on_teleumbrella"] = true,
+}
+
 -- These envelopes are down-sampled RMS traces from the vibration WAV files
 -- shipped with this exact DST installation (882 Hz source, 100 ms bins). They
 -- preserve the original rise/decay far more closely than a fixed rectangle.
@@ -53,6 +69,7 @@ local function Any(text, patterns)
 end
 
 function M.IsLoopEvent(event)
+    if AMBIENT_LOOPS[string.lower(event or "")] then return true end
     local lower = string.lower(event or "")
     return string.find(lower, "_lp", 1, true) ~= nil
         or string.find(lower, "/loop", 1, true) ~= nil
@@ -67,7 +84,8 @@ function M.Get(effect)
     local category = effect.category or (Contains(event, "/hud/") and "UI" or "PLAYER")
 
     if M.IsLoopEvent(event) then
-        return { loop = true, interval = 0.085, duration = 0.10, factor = 0.72, total = -1 }
+        return { loop = true, interval = 0.085, duration = 0.10, factor = 0.72, total = -1,
+            listener_local = AMBIENT_LOOPS[event] == true }
     end
 
     if category == "UI" or Contains(event, "/hud/") then
