@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, "release/**"]
+    branches: [main, "release/**", "codex/**"]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -15,22 +16,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Lua 5.1
         run: sudo apt-get update && sudo apt-get install -y lua5.1
-      - name: Parse distributable Lua
-        run: |
-          find . -path './.git' -prune -o -path './build' -prune -o -path './work' -prune -o -name '*.lua' -print0 \
-            | xargs -0 -n1 luac5.1 -p
-      - name: Run portable behavior tests
-        env:
-          DST_HAPTICS_MOD_ROOT: ${{ github.workspace }}
-        run: |
-          lua5.1 tests/test_adapter.lua
-          lua5.1 tests/test_client_action_bridge.lua
-          lua5.1 tests/test_haptic_parameters.lua
-          lua5.1 tests/test_haptic_config.lua
-          lua5.1 tests/test_haptic_mixer.lua
-          lua5.1 tests/test_runtime_settings.lua
-      - name: Validate Python tools
-        run: python -m compileall -q tools
+      - name: Verify source and portable behavior
+        run: python3 tools/verify.py --lua lua5.1 --report build/ci/verify.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-evidence
+          path: build/ci/verify.json
+          if-no-files-found: error
 
   workshop-package:
     runs-on: windows-latest
@@ -39,6 +32,36 @@ jobs:
       - name: Build clean Workshop package
         shell: pwsh
         run: ./tools/build_release.ps1
+      - name: Check package layout and preserve existing artifacts
+        shell: pwsh
+        run: |
+          $root = 'build/release'
+          $files = @(Get-ChildItem -LiteralPath $root -File)
+          $before = @{}
+          foreach ($file in $files) { $before[$file.Name] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash }
+          $refused = $false
+          try { ./tools/build_release.ps1 } catch {
+            if ($_.Exception.Message -notmatch 'Build output already exists') { throw }
+            $refused = $true
+          }
+          if (-not $refused) { throw 'Existing artifacts were not protected' }
+          foreach ($file in $files) {
+            if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -ne $before[$file.Name]) { throw 'Existing artifact changed' }
+          }
+          $zip = @(Get-ChildItem -LiteralPath $root -Filter '*.zip')
+          if ($zip.Count -ne 1) { throw 'Expected one release archive' }
+          $expected = (Get-Content -LiteralPath ($zip[0].FullName + '.sha256') -Raw).Split(' ')[0]
+          if ((Get-FileHash -LiteralPath $zip[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Checksum mismatch' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($zip[0].FullName)
+          try {
+            $names = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
+            if ('dst_haptics_compat/modinfo.lua' -notin $names -or 'dst_haptics_compat/modmain.lua' -notin $names) { throw 'Missing runtime roots' }
+            foreach ($name in $names) {
+              if ($name -notmatch '^dst_haptics_compat/(scripts/[^/]+\.lua|modinfo\.lua|modmain\.lua|modicon\.(tex|xml)|README(\.en)?\.md|LICENSE)$') { throw "Unexpected release content: $name" }
+            }
+          } finally { $archive.Dispose() }
+          if ((Get-Item -LiteralPath (Join-Path $root 'preview.jpg')).Length -ge 1MB) { throw 'Preview is too large' }
       - uses: actions/upload-artifact@v4
         with:
           name: dst-haptics-compat

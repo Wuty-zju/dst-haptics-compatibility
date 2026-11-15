@@ -42,4 +42,7 @@ If Klei repairs native output, turn Compatibility off or choose Native mode. Do 
 
 ## Development
 
+Start with [current status](docs/STATUS.md), [the document index](docs/INDEX.md),
+[multi-agent coordination](docs/maintenance/MULTI_AGENT.md) and [evidence provenance](docs/maintenance/EVIDENCE.md).
+
 See [the 1.5.0 plan](docs/PLAN-1.5.0.md), [progress notes](docs/notes/1.5.0-progress.md), [architecture](docs/ARCHITECTURE.md), [tests](docs/TESTING.md) and [Workshop packaging](docs/STEAM_WORKSHOP.md). The repository excludes Klei source scripts and raw waveform assets. Original icon artwork lives in `assets/icon.svg`.

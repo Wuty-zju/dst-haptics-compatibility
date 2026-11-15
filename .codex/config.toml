@@ -1,0 +1,6 @@
+# Project defaults only. The primary chat's model, effort and speed stay user-selected.
+# This is a per-session ceiling; cross-session ownership is coordinated in docs/tasks.
+[agents]
+max_concurrent_threads_per_session = 2
+default_subagent_model = "gpt-6.1-sol"
+default_subagent_reasoning_effort = "high"

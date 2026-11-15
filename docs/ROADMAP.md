@@ -1,15 +1,27 @@
 # Roadmap / 后续计划
 
-## Delivered in 1.4.0
+基准：2026-11-15；最新发布 1.5.0，当前游戏 762172 / build 26474873。
+本次只整理维护基础设施，不把未做的运行时增强算作交付。证据见 [索引](maintenance/EVIDENCE.md)。
 
-- Listener-local FrontEnd/FocalPoint handling and 3D `Sim.SetListener` attenuation.
-- Audited one-shot/loop parameter policies and combined category/semantic scaling.
-- Generic hurt arbitration, killing-blow capture snapshots, explicit output modes and Workshop staging checks.
+| 顺序 | 工作与完成标准 | 合理的并行方式 |
+|---|---|---|
+| P0 | 已有14新增项的表差异和静态引用快照；继续审查各自客户端可观察性、Boss/loop路径与实际漏震风险 | Sol只读触发路径调查；主对话判断影响 |
+| P0 | 动作桥复审：当前 wilson_client、player_classified、combat、workable、SoundEmitter 调用点仍能证明工具/命中/受击 | 与数据调查并行；共同触及 adapter 时串行实现 |
+| P1 | Boss/环境条件覆盖：区分客户端 Lua 可观察、引擎复制和无信号路径；近/远、loop/一次性逐类保留限制 | 单一模块任务；跨模块先设计，再实现 |
+| P1 | 实机最小验收：Xbox/DS4/DS5 可用的直连/Steam Input 路由，校准层级、工具、受击、Boss远近、退出世界 | 人与控制器单会话测试；agent并行整理日志 |
+| P1 | 断连、暂停、洞穴切换/重连、循环清理的实际游戏验证，记录配置、路线和结果 | 证据独立整理；修复按文件所有权分配 |
+| P2 | 更新包络来源与空间策略：只在当前资源或原生 API 提供可靠证据时改进 | 研究与独立测试可并行；共同接口由协调者集成 |
+| 发布 | 决定下一版号后升版、集成回归、唯一候选输出目录、CI成功、更新原 Workshop ID 3805091756 | 单一发布负责人 |
 
-## Open validation
+## 长期方向
 
-- Re-run the 489-event audit after every significant DST update and investigate new no-reference events.
-- Add measured waveform families only where shipped assets provide stable evidence; avoid event-specific guesses.
-- Expand hardware acceptance across Xbox, DS4 and DualSense, USB/Bluetooth and Steam Input modes.
-- Watch for a future Klei native Windows fix. Compatibility OFF is the supported migration path; native and compatibility outputs must never intentionally run together.
-- If Klei exposes a public waveform or attenuation API, replace envelope/spatial approximations with the native values.
+- 观察 Klei 是否修复 Windows 原生输出。没有读取物理马达状态的接口时，不伪造自动检测；Native/Compatibility 继续显式互斥。
+- 若新增公开 waveform、audibility 或 attenuation API，优先替换近似实现。
+- 每次重要 DST 更新重新采集快照；数量变化检查不能代替逐项触发路径审查。
+- 保持一个状态入口、一个证据索引、少量任务合同；不引入常驻 agent daemon 或多层递归调度器。
+
+## 已完成的版本背景
+
+1.4.0：监听器空间、声音参数、受击仲裁、原生/兼容输出模式。
+1.5.0：分类强度/时长细调、配置模块、独立循环混合、过期反馈取消和原创图标。
+这些是历史交付说明，硬件完整验收仍见 [矩阵](HARDWARE_MATRIX.md)。

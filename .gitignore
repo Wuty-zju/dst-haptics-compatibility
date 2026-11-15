@@ -5,4 +5,7 @@ __pycache__/
 build/
 outputs/
 work/
+.local/
+archive/
+.worktrees/
 

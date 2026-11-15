@@ -12,19 +12,16 @@ if ($sourceInfo -notmatch 'version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"') {
 $sourceVersion = $Matches[1]
 if ($Version -eq '') { $Version = $sourceVersion }
 if ($Version -ne $sourceVersion) { throw 'Requested version differs from modinfo.lua' }
-$OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
+$OutputRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
 $stage = Join-Path $OutputRoot "dst_haptics_compat"
 $zip = Join-Path $OutputRoot ("dst_haptics_compat-{0}.zip" -f $Version)
 $checksum = $zip + ".sha256"
 $preview = Join-Path $OutputRoot "preview.jpg"
 
-if (Test-Path -LiteralPath $stage) {
-    $resolvedStage = (Resolve-Path -LiteralPath $stage).Path
-    if ($resolvedStage -ne [IO.Path]::GetFullPath($stage) -or
-        (Get-Item -LiteralPath $stage).Attributes -band [IO.FileAttributes]::ReparsePoint) {
-        throw 'Refusing to clear a redirected staging folder'
+foreach ($existing in @($stage, $zip, $checksum, $preview)) {
+    if (Test-Path -LiteralPath $existing) {
+        throw "Build output already exists. Preserve it and choose a new -OutputRoot: $existing"
     }
-    Remove-Item -LiteralPath $stage -Recurse -Force
 }
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
@@ -64,9 +61,6 @@ if ($modinfo -notmatch 'client_only_mod\s*=\s*true' -or
     throw "Client-only Workshop flags are invalid"
 }
 
-if (Test-Path -LiteralPath $zip) {
-    Remove-Item -LiteralPath $zip -Force
-}
 Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -LiteralPath $checksum -Value ("{0}  {1}" -f $hash, (Split-Path $zip -Leaf)) -Encoding ascii

@@ -1,43 +1,57 @@
 # Testing / 测试
 
-## Automated checks / 自动检查
+## One entry point / 统一入口
 
-The test suite intentionally runs against a Lua 5.1 DLL because DST does not support modern Lua syntax. It covers:
-
-- parsing every distributable Lua file;
-- all 492 native definitions receiving a profile;
-- server-confirmed chop/mine/hurt/melee bridge behavior;
-- no material impact for an out-of-range attack;
-- argument and return-value preservation in SoundEmitter wrappers;
-- fast bypass for unrelated sounds;
-- Profile OFF, no controller, pause and compatibility OFF;
-- `player_only`, local HUD exception, UI/non-spatial and category spatial falloff;
-- deduplication, loop volume/kill/unload cleanup and hot-plug output refresh;
-- live settings entry/refresh behavior and explicit weak/medium/strong calibration pulses.
-
-Run on Windows with an extracted current `scripts` directory and a DST-compatible `lua51Original.dll`:
+需要 Python 3.11+，以及 Lua 5.1 可执行程序或 Windows `lua51Original.dll`。
+`tools/verify.py` 是唯一可移植测试清单，CI 和本地共用。
 
 ```powershell
-$python = "path\to\python.exe"
-$scripts = "path\to\extracted\scripts"
-& $python tools\validate_lua.py --mod-root . --lua-deps "path\to\lua51\deps"
-& $python tools\run_lua51.py tests\test_original_haptics.lua --mod-root . --original-scripts $scripts
-& $python tools\run_lua51.py tests\test_client_action_bridge.lua --mod-root .
-& $python tools\run_lua51.py tests\test_adapter.lua --mod-root .
-& $python tools\run_lua51.py tests\test_haptic_parameters.lua --mod-root .
-& $python tools\run_lua51.py tests\test_runtime_settings.lua --mod-root .
+python tools/verify.py --lua lua5.1 --report .local/evidence/new-portable-session/verify.json
+python tools/verify.py --lua-deps "<DLL目录>" --original-scripts "<当前原版scripts>" --report .local/evidence/new-native-session/verify.json
 ```
 
-## Rebuilding the audit / 重建审计
+未传 `--lua` 时尝试 PATH 中的 Lua 5.1，再尝试 Windows DLL。显式选错版本或找不到
+运行时会 FAIL，不偷偷回退。DLL 参数传给每个测试。没有原版脚本参数或
+`DST_ORIGINAL_SCRIPTS` 时，原版检查为 SKIP；不再自动选择 `work/` 的旧快照。
+已有 JSON 路径拒绝覆盖。输出包含命令、退出码、基线提交、源码 hash 和原版输入 hash。
 
-Klei Lua sources and raw haptic WAVs are not redistributed in this repository. Point the tools at your legally installed/extracted current game data:
+| 范围 | 检查内容 |
+|---|---|
+| Lua 语法 | 根入口、scripts 下运行时代码和 tests 下 Lua 入口，排除归档/旧副本 |
+| 六项 portable 行为测试 | adapter、动作桥、声音参数、配置、循环混合、运行时设置 |
+| 原版数据测试（可选） | 指定快照每条定义生成 profile，分类强度/时长双轴全部 41 档 |
+| Python/TOML/Markdown | 工具语法、维护回归、项目 TOML 语法、本地相对文件链接 |
+| 包验证（单独CI job/手工检查） | 不包含在 verify.py 结果中；新输出目录构建后检查根布局、白名单、checksum、preview 与拒绝覆盖 |
+
+模拟行为包括工具/受击/近战确认、挥空无材质命中、hook 变参与返回值、player_only、
+空间衰减、去重、loop 停止、暂停/断连/卸载、配置热更新和校准层级。
+这些是逻辑测试，不等于引擎事件实际可观察或物理马达体感测试。
+
+## Current game input / 当前原版输入
+
+使用 [snapshot_game.ps1](../tools/snapshot_game.ps1)采集安装目录，保存游戏版本、build、
+scripts.zip 与 haptics.lua hash。采集方法见 [工作区文档](maintenance/WORKSPACE.md)。
+11 月 15 日快照是 506/503；9 月 492/489 是历史快照。断言次数依数据生成，不能写死。
+
+GitHub CI 不含 Klei 原版脚本，所以原版数据检查 SKIP。发布 workflow 先等待可复用
+CI 通过再打包/发布；CI成功不代表原版数据或硬件验收通过。
+
+## Rebuilding the audit / 重建静态审计
+
+以下目录均应是新会话目录，`$scripts` 必须来自你采集的当前快照：
 
 ```powershell
-& $python tools\audit_haptics.py --scripts $scripts --wav-root "...\data\haptics\vibration\vibration" --out build\audit
-& $python tools\analyze_waveform_envelopes.py --wav-root "...\data\haptics\vibration\vibration" --out build\audit\core_envelopes.json
-& $python tools\build_haptics_report.py --audit build\audit\audit.json --out build\reports --version 1.4.0
+python tools/audit_haptics.py --scripts $scripts --wav-root "<DST>/data/haptics/vibration/vibration" --out .local/evidence/new-audit/audit
+python tools/analyze_waveform_envelopes.py --wav-root "<DST>/data/haptics/vibration/vibration" --out .local/evidence/new-audit/core_envelopes.json
 ```
+
+审计得到源码字面引用与波形候选；文件名相似度不能证明精确的 event→WAV bank 映射。
+原有 `build_haptics_report.py` 的机制说明模板包含历史实现描述，不能未经逐项复审
+就把它输出为新版本的完整保真结论。新数据先生成带 hash/build 的快照摘要。
 
 ## Physical acceptance / 物理验收
 
-Automated tests cannot feel a motor. Manual acceptance should cover continuous chop/mine cadence, swing versus hit, local hurt, near/far Boss behavior, UI, cave transitions, disconnect/reconnect and leaving a world while a loop is active. DS4/DS5 should be tested over both direct/Steam Input routes that actually expose rumble to DST. Record results in [the hardware matrix](HARDWARE_MATRIX.md).
+连续工具节奏、挥动/命中、当地受击、Boss近/远、UI、具名loop、退出世界、暂停、
+断连/重连、洞穴切换分别记录。DS4/DS5 只测试实际向 DST 暴露 rumble 的直连/
+Steam Input 路由。记录设备、USB/蓝牙、Steam Input、配置、游戏和Mod版本、日期、
+日志位置及实际感受。使用 [硬件矩阵](HARDWARE_MATRIX.md)，不以枚举状态代替验收。

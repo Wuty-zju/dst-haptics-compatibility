@@ -2,6 +2,37 @@
 
 This project targets the Don't Starve Together Workshop (App ID `322330`) as a ready-to-use, client-only utility mod.
 
+## Current item / 当前项目
+
+Workshop ID: **3805091756**. A retained 2026-11-07 local client log shows this item
+loading 1.5.0. Public visibility and current page metadata were not verified during
+the 2026-11-15 workspace review. The older release receipt's "not uploaded" statement
+is historical, not the current installation state. See [status](STATUS.md).
+
+For further uploads, log into the original author Steam account and select this
+existing item in the official uploader. **Edit/Update it; do not Add a duplicate.**
+
+## Another Windows computer / 换电脑上传
+
+1. Open [latest GitHub Release](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/latest).
+2. Download the named `dst_haptics_compat-<version>.zip`, its `.sha256` and `preview.jpg` assets. Do not use GitHub's automatic Source code ZIP.
+3. Compare `Get-FileHash <zip> -Algorithm SHA256` with the checksum file, then extract it.
+4. In Steam Library, include **Tools**, search **Don't Starve Mod Tools**, install and launch **Mod Uploader**. If absent from the library search, try Windows Run: `steam://install/245850`. A missing entitlement or install failure should be diagnosed from Steam, not bypassed with unofficial tools.
+5. Keep Steam online under the original author account. Choose **Don't Starve Together** in the uploader, select item **3805091756**, then **Edit**.
+6. Enable **Update Data** and choose the extracted inner folder where `modinfo.lua` is directly visible. It need not be installed into the game just to upload.
+7. Update Preview only when replacing the JPEG; update Details only when intentionally replacing the Workshop title/description/tags. Avoid overwriting a longer web description with the short `modinfo.lua` description.
+8. Enter the release change note and publish the update. Keep the same item ID and current visibility unless deliberately changing them.
+9. If Steam requests the Workshop legal agreement, the account owner accepts it. Passwords and Steam Guard codes stay with the owner.
+10. Subscribe and verify the downloaded Workshop copy without a duplicate local mod enabled. Record load logs and actual physical test results separately.
+
+For a genuinely new item only, use Add and private visibility first; save the ID
+after creation. Upload failures: `%LOCALAPPDATA%\Don't Starve Mod Uploader\ModUploader.log`.
+
+Official Klei [uploader documentation](https://kleiforums.com/forums/topic/26494-dont-starve-steam-workshop-uploader/)
+describes selecting a published item and its separate Data/Preview/Details update switches.
+Steam's [implementation guide](https://partner.steamgames.com/doc/features/workshop/implementation)
+explains agreement-dependent visibility.
+
 ## Content package
 
 The Workshop content folder must contain the runtime mod at its root. Do not wrap it in another repository directory.
