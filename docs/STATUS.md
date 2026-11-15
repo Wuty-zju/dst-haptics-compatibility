@@ -5,8 +5,8 @@
 | 项目 | 状态 |
 |---|---|
 | PR #1 | 已复审、检查通过并合并；main合并提交e3dd8a4 |
-| 本轮开发 | codex/release-1.6.0；模块重构、原版路径审计与中英文文档 |
-| GitHub版本 | [1.6.0 发布入口](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/tag/v1.6.0)，发布工作流在最终CI通过后生成成品 |
+| 本轮开发 | PR #2已合并main；模块重构、原版路径审计与中英文文档已交付 |
+| GitHub版本 | [1.6.0 正式发布](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/tag/v1.6.0)，标签5e6c850；CI/Release均通过，线上附件已下载校验 |
 | Workshop | [项目3805091756](https://steamcommunity.com/sharedfiles/filedetails/?id=3805091756)，GitHub发版不会自动更新工坊 |
 | 原版基准 | DST762172 / Steam build26474873；Steam官方UpToDateCheck于本日返回up_to_date=true |
 | 原版定义 | 506条、503唯一事件；排除注释后406有字面引用、97没有 |
@@ -26,6 +26,7 @@
 ## 证据与边界
 
 [1.6触发审计](audit/1.6.0-trigger-paths.md) · [1.6审核](reports/1.6.0-review.md) ·
+[发布凭证](reports/1.6.0-release-receipt.md) ·
 [硬件矩阵](HARDWARE_MATRIX.md) · [路线图](ROADMAP.md)
 
 当前haptics.lua SHA-256：

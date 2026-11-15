@@ -5,7 +5,7 @@
 
 | ID | 结论 | 证据类别与日期 | 材料 / 局限 |
 |---|---|---|---|
-| E01 | 最新正式 GitHub Release 为 1.5.0 | 当次远端 API 与 Git refs 核对 | [Release](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/tag/v1.5.0)；本地保留 API JSON |
+| E01 | 维护开始时最新正式 GitHub Release 为 1.5.0 | 当时远端 API 与 Git refs 核对 | [1.5 Release](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/tag/v1.5.0)；后续1.6发布见E15 |
 | E02 | 发布 ZIP 37,400 字节，本地 hash 与线上 digest 一致 | 当次直接 hash + GitHub API | 本地 outputs ZIP/checksum；未重新下载二进制，不宣称网络下载复验 |
 | E03 | Workshop item 3805091756 已被游戏加载 | 11月7日原始 client_log，11月15日复制和hash | 原始日志行186、280；本机 Workshop 内容目录存在；网页公开状态/作者未核实 |
 | E04 | 当前本机原版 506 定义/503 唯一事件 | 11月15日从当前安装 bundle 提取 | 游戏762172、Steam build26474873；原始脚本只保存在本地 |
@@ -19,6 +19,7 @@
 | E12 | 1.6按有效代码重新审计：406唯一event有字面引用，97没有 | 11月15日排除Lua注释后重新运行 | [14新增事件触发路径](../audit/1.6.0-trigger-paths.md)；不覆盖历史407/96原始报告 |
 | E13 | 当前Steam build26474873被官方接口确认为最新可列出版本 | 11月15日UpToDateCheck直接响应 | success/up_to_date/version_is_listable均true；本地pr1-merge-review/steam-up-to-date.json |
 | E14 | 1.6重构的原版数据、集成与语言回归 | 新版本审核和CI | [1.6审核](../reports/1.6.0-review.md)；光束远程句柄可见性和物理体感尚未实测 |
+| E15 | 1.6.0正式发布，线上附件已重新下载并核对 | 11月15日GitHub API、工作流、下载hash和Git blob比较 | [发布凭证](../reports/1.6.0-release-receipt.md)；不代表已经更新Steam Workshop |
 
 ## 输入和成品哈希
 
