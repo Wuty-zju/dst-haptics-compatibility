@@ -1,7 +1,6 @@
 local G = GLOBAL
 local pairs = G.pairs
 local pcall = G.pcall
-local string = G.string
 local tostring = G.tostring
 local type = G.type
 
@@ -16,8 +15,8 @@ local function SameConfig(a, b)
     return true
 end
 
-function RuntimeSettings.Install(api, config, modname, read_config)
-    if api == nil or api.ApplyConfig == nil or read_config == nil then
+function RuntimeSettings.Install(api, config, modname, read_config, L)
+    if api == nil or api.ApplyConfig == nil or read_config == nil or type(L) ~= "function" then
         return
     end
     local state = api.GetState ~= nil and api.GetState() or nil
@@ -34,7 +33,7 @@ function RuntimeSettings.Install(api, config, modname, read_config)
         end
         local ok, Screen = pcall(G.require, "screens/redux/modconfigurationscreen")
         if not ok or Screen == nil then
-            print("[DST Haptics Compat] unable to open in-world configuration: " .. tostring(Screen))
+            print("[DST Haptics Compat] " .. L(config.language, "settings_open_failed", tostring(Screen)))
             return
         end
         local active = G.TheFrontEnd:GetActiveScreen()
@@ -67,7 +66,7 @@ function RuntimeSettings.Install(api, config, modname, read_config)
                     local id = G.TheInput:GetControllerID()
                     local prompt = G.TheInput:GetLocalizedControl(id, G.CONTROL_MENU_MISC_2)
                         .. " "
-                        .. (config.language == "en" and "Haptics" or "震动设置")
+                        .. L(config.language, "settings_title")
                     return text ~= "" and (text .. "  " .. prompt) or prompt
                 end
                 return text
@@ -88,19 +87,26 @@ function RuntimeSettings.Install(api, config, modname, read_config)
         end)
     end
 
-    G.scheduler:ExecutePeriodic(0.5, function()
+    -- The game's ordinary scheduler stops on server pause. Settings saved from
+    -- the pause menu must update prompts and output gating before resuming.
+    local settings_scheduler = G.staticScheduler or G.scheduler
+    settings_scheduler:ExecutePeriodic(0.5, function()
         local ok, values = pcall(read_config)
         if ok and type(values) == "table" and not SameConfig(config, values) then
             local previous_test = config.calibration_test
             api.ApplyConfig(values)
+            -- Keep the UI's configuration current even when ApplyConfig replaces
+            -- its own table. Resolve language on every prompt/log invocation.
+            for key, value in pairs(values) do
+                config[key] = value
+            end
             if values.calibration_test ~= previous_test
                 and values.calibration_test ~= "off"
                 and api.TestPulse ~= nil then
                 api.TestPulse(values.calibration_test)
             end
             if values.debug then
-                print(string.format(
-                    "[DST Haptics Compat] runtime settings applied: enabled=%s mode=%s controller=%s response=%s strength=%.2f",
+                print("[DST Haptics Compat] " .. L(config.language, "settings_applied",
                     tostring(values.compatibility),
                     tostring(values.output_mode),
                     tostring(values.controller_profile),

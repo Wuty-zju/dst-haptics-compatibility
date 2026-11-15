@@ -1,24 +1,35 @@
 name = "DST Haptics Compatibility / 手柄震动兼容"
 description = [[
-修复 Windows 下原版 TheHaptics 无输出的问题。动态读取当前版本 haptics.lua，桥接可由服务器回传证明的声音缺口，提供 Xbox/DS4/DualSense 输出模式和可即时生效的局内细粒度配置。
+为 Windows 手柄提供兼容震动输出。读取当前 haptics.lua，保留真实声音事件与经过核对的客户端动作反馈；支持 Xbox、DS4、DualSense 及局内设置。默认使用严格受击事件，近似受击补偿可单独开启。
 
-Fixes silent native TheHaptics output on Windows. Uses the current haptics.lua plus replicated action bridges, controller-family output profiles, and live in-world configuration.
+Compatibility rumble for Windows controllers using the current haptics.lua, real sound events and audited client action feedback. Supports Xbox, DS4, DualSense and live settings. Approximate hurt fallback is optional and OFF by default.
 ]]
 author = "wuty"
 icon_atlas = "modicon.xml"
 icon = "modicon.tex"
-version = "1.5.0"
-
+version = "1.6.0"
 api_version = 10
 dst_compatible = true
 dont_starve_compatible = false
 reign_of_giants_compatible = false
-
 client_only_mod = true
 all_clients_require_mod = false
 server_only_mod = false
 
-local function ScaleOptions()
+-- The configuration screen has no live language context: keep it bilingual.
+local function Choices(rows)
+    local options = {}
+    for i = 1, #rows do
+        options[i] = { description = rows[i][1], data = rows[i][2] }
+    end
+    return options
+end
+
+local function Toggle()
+    return Choices({ { "开启 / ON", true }, { "关闭 / OFF", false } })
+end
+
+local function Percentages()
     local options = {}
     for percent = 0, 200, 5 do
         options[#options + 1] = { description = percent .. "%", data = percent / 100 }
@@ -26,171 +37,59 @@ local function ScaleOptions()
     return options
 end
 
-configuration_options =
-{
+configuration_options = {}
+local function Option(name, label, hover, options, default)
+    configuration_options[#configuration_options + 1] =
     {
-        name = "compatibility",
-        label = "震动适配 / Vibration Compatibility",
-        hover = "开启兼容输出；关闭时钩子完整旁路、停止兼容震动并恢复原版行为。 / Enable compatibility output; OFF fully bypasses hooks, stops compatibility rumble, and restores native behavior.",
-        options =
-        {
-            { description = "开启 / ON", data = true },
-            { description = "关闭 / OFF", data = false },
-        },
-        default = true,
-    },
-    {
-        name = "language",
-        label = "语言 / Language",
-        hover = "运行时日志语言。配置页文本固定为双语；更改后重新载入 Mod 生效。 / Runtime log language. Config labels stay bilingual; reload the mod after changing.",
-        options =
-        {
-            { description = "中文", data = "zh" },
-            { description = "English", data = "en" },
-        },
-        default = "zh",
-    },
-    {
-        name = "output_mode",
-        label = "输出模式 / Output Mode",
-        hover = "兼容模式驱动马达；原生模式完全旁路；诊断模式禁用原生和兼容马达，开启调试日志后记录事件。 / Compatibility drives motors; Native fully bypasses; Diagnostic disables all motor output and logs events when Debug Logging is ON.",
-        options =
-        {
-            { description = "兼容 / Compatibility", data = "compatibility" },
-            { description = "原生 / Native", data = "native" },
-            { description = "仅诊断 / Diagnostic", data = "diagnostic" },
-        },
-        default = "compatibility",
-    },
-    {
-        name = "strength",
-        label = "总体震动强度 / Overall Strength",
-        hover = "在保留原版相对层级的基础上缩放最终输出。 / Scales final output while preserving original relative levels.",
-        options = ScaleOptions(),
-        default = 1.00,
-    },
-    {
-        name = "controller_profile",
-        label = "手柄震动模式 / Controller Profile",
-        hover = "自动识别 Xbox、DS4、PS5/DualSense；Steam Input 映射不准确时可手动指定。 / Auto-detect the controller family, or force one for Steam Input.",
-        options =
-        {
-            { description = "自动 / Auto", data = "auto" },
-            { description = "Xbox / XInput", data = "xbox" },
-            { description = "DualShock 4", data = "ds4" },
-            { description = "PS5 / DualSense", data = "ds5" },
-        },
-        default = "auto",
-    },
-    {
-        name = "response_mode",
-        label = "马达响应 / Motor Response",
-        hover = "原版细节保留完整包络；柔和与强力只改变输出体感，不改变事件时机。 / Detail preserves the calibrated envelope; Soft and Punchy only alter motor response.",
-        options =
-        {
-            { description = "原版细节 / Detail", data = "detail" },
-            { description = "柔和 / Soft", data = "soft" },
-            { description = "强力 / Punchy", data = "punchy" },
-        },
-        default = "detail",
-    },
-    {
-        name = "calibration_test",
-        label = "测试脉冲 / Calibration Pulse",
-        hover = "在局内切换到弱/中/强会立即播放一次测试脉冲；这不是游戏事件。切回关闭可再次测试同一档。 / Changing to Weak/Medium/Strong in-world plays one explicit test pulse. Return to OFF before repeating the same level.",
-        options =
-        {
-            { description = "关闭 / OFF", data = "off" },
-            { description = "弱 / Weak", data = "weak" },
-            { description = "中 / Medium", data = "medium" },
-            { description = "强 / Strong", data = "strong" },
-        },
-        default = "off",
-    },
-    {
-        name = "tool_scale",
-        label = "工具反馈 / Tools",
-        hover = "砍树、采矿、锤击、挖地与种植。 / Chop, mine, hammer, dig and plant feedback.",
-        options = ScaleOptions(),
-        default = 1.00,
-    },
-    {
-        name = "combat_scale",
-        label = "战斗反馈 / Combat",
-        hover = "武器挥动与实际材质命中。 / Weapon swings and material impacts.",
-        options = ScaleOptions(),
-        default = 1.00,
-    },
-    {
-        name = "danger_scale",
-        label = "受伤危险 / Danger",
-        hover = "本地玩家受伤、饥饿、寒冷、过热等原版危险事件。 / Native hurt, hunger, cold and overheat feedback.",
-        options = ScaleOptions(),
-        default = 1.00,
-    },
-    {
-        name = "player_scale",
-        label = "玩家交互 / Player Interaction",
-        hover = "装备、采集、箱子、复活等其它 PLAYER 事件。 / Other PLAYER events such as equipment, pickup, chests and revival.",
-        options = ScaleOptions(),
-        default = 1.00,
-    },
-    {
-        name = "boss_scale",
-        label = "Boss 反馈 / Boss",
-        hover = "Boss 脚步、落地、重击与技能。 / Boss footsteps, landings, slams and abilities.",
-        options = ScaleOptions(),
-        default = 1.00,
-    },
-    {
-        name = "environment_scale",
-        label = "环境反馈 / Environment",
-        hover = "环境事件的独立倍率。 / Independent scale for environmental events.",
-        options = ScaleOptions(),
-        default = 1.00,
-    },
-    {
-        name = "ui_scale",
-        label = "界面反馈 / UI & HUD",
-        hover = "UI/HUD 原版事件，不经过世界距离衰减。 / Native UI/HUD events without world-distance attenuation.",
-        options = ScaleOptions(),
-        default = 1.00,
-    },
-    {
-        name = "loop_scale",
-        label = "持续震动 / Loops",
-        hover = "仅缩放具名循环效果，KillSound 和世界卸载仍会立即清理。 / Scales named loop effects; lifecycle cleanup remains unchanged.",
-        options = ScaleOptions(),
-        default = 1.00,
-    },
-    {
-        name = "spatial_scale",
-        label = "空间作用范围 / Spatial Reach",
-        hover = "缩放 PLAYER、DANGER、ENVIRONMENT、BOSS 的远端衰减距离；UI 不受影响。 / Scales world-event falloff distance; UI is unaffected.",
-        options =
-        {
-            { description = "75%", data = 0.75 },
-            { description = "100%", data = 1.00 },
-            { description = "125%", data = 1.25 },
-            { description = "150%", data = 1.50 },
-        },
-        default = 1.00,
-    },
-    {
-        name = "debug",
-        label = "调试日志 / Debug Logging",
-        hover = "记录匹配、距离、强度、持续时间、通道与过滤原因；默认关闭。 / Log matches, distance, intensity, duration, channel and filter reasons; OFF by default.",
-        options =
-        {
-            { description = "关闭 / OFF", data = false },
-            { description = "开启 / ON", data = true },
-        },
-        default = false,
-    },
-}
+        name = name, label = label, hover = hover,
+        options = options, default = default,
+    }
+end
 
--- Keep saved 1.4 configuration keys stable. All native categories, including
--- future events assigned to those categories, inherit these two tuning axes.
+Option("compatibility", "震动兼容 / Compatibility",
+    "开启兼容输出；关闭后恢复原版输出。 / Enable compatibility rumble; OFF restores native output.", Toggle(), true)
+Option("language", "语言 / Language",
+    "局内提示和日志语言；配置页固定双语。局内更改后立即生效。 / Live prompts and logs update immediately in-world; configuration labels stay bilingual.",
+    Choices({ { "中文", "zh" }, { "English", "en" } }), "zh")
+Option("output_mode", "输出模式 / Output Mode",
+    "兼容模式输出震动；原生模式恢复原版；诊断模式仅记录事件，需开启调试日志。 / Compatibility drives rumble; Native restores the game; Diagnostic logs events with Debug Logging enabled.",
+    Choices({ { "兼容 / Compatibility", "compatibility" }, { "原生 / Native", "native" }, { "仅诊断 / Diagnostic", "diagnostic" } }), "compatibility")
+Option("strength", "总体强度 / Overall Strength",
+    "缩放最终震动强度。 / Scale final rumble strength.", Percentages(), 1)
+Option("controller_profile", "手柄类型 / Controller Profile",
+    "自动识别；Steam Input 映射不准确时可手动指定。 / Auto-detect, or select manually for Steam Input.",
+    Choices({ { "自动 / Auto", "auto" }, { "Xbox / XInput", "xbox" }, { "DualShock 4", "ds4" }, { "PS5 / DualSense", "ds5" } }), "auto")
+Option("response_mode", "马达响应 / Motor Response",
+    "调整马达体感，不改变事件触发时机。 / Adjust motor response while preserving event timing.",
+    Choices({ { "细节 / Detail", "detail" }, { "柔和 / Soft", "soft" }, { "强力 / Punchy", "punchy" } }), "detail")
+Option("calibration_test", "测试脉冲 / Calibration Pulse",
+    "局内选择弱、中、强播放一次测试；切回关闭后可重复。 / Select Weak, Medium or Strong in-world for one test pulse; return to OFF to repeat.",
+    Choices({ { "关闭 / OFF", "off" }, { "弱 / Weak", "weak" }, { "中 / Medium", "medium" }, { "强 / Strong", "strong" } }), "off")
+Option("hurt_fallback", "受击近似补偿（非严格原版）/ Approximate Hurt Fallback",
+    "默认关闭，仅使用实际原声路径。开启后按复制的 attacked 信号估计通用受击反馈；该信号不能证明原版播放了此声音，可能与原版不同。 / OFF uses actual sound events. ON estimates generic hurt feedback from replicated attacked signals; these do not prove the native sound played and may differ from native behavior.", Toggle(), false)
+
+-- Preserve every saved tuning key. All axes use the same 0..200% range.
+local scales =
+{
+    { "tool_scale", "工具反馈 / Tools", "砍树、采矿、锤击、挖地与种植。 / Chop, mine, hammer, dig and plant." },
+    { "combat_scale", "战斗反馈 / Combat", "武器挥动与材质命中。 / Weapon swings and material impacts." },
+    { "danger_scale", "受伤危险 / Danger", "原版受伤、饥饿、寒冷和过热事件。 / Native hurt, hunger, cold and overheat events." },
+    { "player_scale", "玩家交互 / Player Interaction", "装备、采集、箱子和复活等玩家事件。 / Equipment, pickup, chests, revival and other player events." },
+    { "boss_scale", "Boss 反馈 / Boss", "实际可观察的 Boss 声音事件。 / Observable native Boss sound events." },
+    { "environment_scale", "环境反馈 / Environment", "环境声音事件。 / Environmental sound events." },
+    { "ui_scale", "界面反馈 / UI & HUD", "界面事件不受世界距离衰减。 / UI events bypass world-distance attenuation." },
+    { "loop_scale", "持续震动 / Loops", "缩放持续声音反馈。 / Scale sustained sound feedback." },
+}
+for i = 1, #scales do
+    local row = scales[i]
+    Option(row[1], row[2], row[3], Percentages(), 1)
+end
+Option("spatial_scale", "空间范围 / Spatial Reach",
+    "缩放世界事件的衰减距离。 / Scale world-event falloff distance.",
+    Choices({ { "75%", 0.75 }, { "100%", 1 }, { "125%", 1.25 }, { "150%", 1.5 } }), 1)
+Option("debug", "调试日志 / Debug Logging",
+    "记录事件、强度、时长和过滤原因。 / Log events, strength, duration and filter reasons.", Toggle(), false)
+
 local durations =
 {
     { "duration", "总体时长 / Overall Duration" },
@@ -204,24 +103,9 @@ local durations =
     { "loop_duration", "循环单次时长 / Loop Pulse Duration" },
 }
 for i = 1, #durations do
-    configuration_options[#configuration_options + 1] =
-    {
-        name = durations[i][1],
-        label = durations[i][2],
-        hover = "100% 为原版兼容包络基准；0% 关闭此类型。循环仅调整单次脉冲，仍随声音停止。 / 100% uses the native-compatible envelope baseline; 0% mutes this type. Loops retain sound lifecycle.",
-        options = ScaleOptions(),
-        default = 1,
-    }
+    Option(durations[i][1], durations[i][2],
+        "100% 为兼容包络基准；0% 关闭该类型。 / 100% uses the compatibility envelope baseline; 0% mutes this type.", Percentages(), 1)
 end
-configuration_options[#configuration_options + 1] =
-{
-    name = "controller_adaptation",
-    label = "手柄专用适配 / Controller Adaptation",
-    hover = "开启设备响应曲线；关闭回退通用输出，保留事件与百分比设置。 / Device response curves, or generic output with the same events and percentage settings.",
-    options =
-    {
-        { description = "适配 / Adapted", data = true },
-        { description = "通用 / Generic", data = false },
-    },
-    default = true,
-}
+Option("controller_adaptation", "手柄适配 / Controller Adaptation",
+    "开启设备响应曲线；关闭使用通用输出。 / Apply device response curves, or use generic output.",
+    Choices({ { "适配 / Adapted", true }, { "通用 / Generic", false } }), true)
