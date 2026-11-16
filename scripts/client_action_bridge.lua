@@ -130,8 +130,8 @@ function Bridge.Install(api)
     local captures = G.setmetatable({}, { __mode = "k" })
     local work_contexts = G.setmetatable({}, { __mode = "k" })
     local serials = G.setmetatable({}, { __mode = "k" })
-    local attached = G.setmetatable({}, { __mode = "k" })
-    local records, listeners, tasks = {}, {}, {}
+    local attached = {}
+    local records, worlds = {}, {}
     local function IsInstalled()
         if closed then return false end
         if api.IsInstalled ~= nil then return api.IsInstalled() == true end
@@ -166,11 +166,24 @@ function Bridge.Install(api)
         return state ~= nil and (kind == "chop" or kind == "mine" or kind == "hammer" or kind == "dig")
             and (state == G.hash(kind) or state == G.hash(kind .. "_start"))
     end
-    local function Listen(entity, event, fn)
+    local function Listen(entity, event, fn, bindings)
         entity:ListenForEvent(event, fn)
-        listeners[#listeners + 1] = { entity = entity, event = event, fn = fn }
+        bindings[#bindings + 1] = { entity = entity, event = event, fn = fn }
     end
-    local function BindObserver(object, key, marker, observe)
+    local function RemoveListeners(bindings)
+        for i = 1, #bindings do
+            local binding = bindings[i]
+            if binding.entity.RemoveEventCallback ~= nil then
+                pcall(binding.entity.RemoveEventCallback, binding.entity, binding.event, binding.fn)
+            end
+        end
+    end
+    local function ReleaseRecords(owned)
+        for record in G.pairs(owned) do
+            if record.owner == owner then record.observe, record.owner = nil, nil end
+        end
+    end
+    local function BindObserver(object, key, marker, observe, owned)
         local record = object[marker]
         if G.type(record) ~= "table" then
             record = { original = object[key] }
@@ -182,7 +195,8 @@ function Bridge.Install(api)
             object[key] = record.wrapper
         end
         record.observe, record.owner = observe, owner
-        records[record] = true
+        owned = owned or records
+        owned[record] = true
     end
     local function CaptureBufferedAction(inst, kind)
         if not IsInstalled() or inst ~= G.ThePlayer then return end
@@ -231,7 +245,27 @@ function Bridge.Install(api)
 
     local function AttachPlayer(player)
         if not IsInstalled() or player == nil or player ~= G.ThePlayer or attached[player] then return end
-        attached[player] = true
+        local resources = { listeners = {}, records = {} }
+        local active = true
+        attached[player] = resources
+        local function IsAttached()
+            return active and IsInstalled()
+        end
+        local function DetachPlayer()
+            if not active then return end
+            active = false
+            ReleaseRecords(resources.records)
+            RemoveListeners(resources.listeners)
+            local task = resources.task
+            if task ~= nil and task.Cancel ~= nil then pcall(task.Cancel, task) end
+            captures[player], work_contexts[player], serials[player] = nil, nil, nil
+            if attached[player] == resources then attached[player] = nil end
+            -- Cancelled tasks may remain observable to development tools. Their
+            -- callbacks must not retain this removed entity through resources.
+            resources.listeners, resources.records, resources.task, resources.cleanup = nil, nil, nil, nil
+        end
+        resources.cleanup = DetachPlayer
+        Listen(player, "onremove", DetachPlayer, resources.listeners)
         -- A same-VM reinstall may reuse an already loaded stategraph without
         -- executing any newly registered postinit callbacks.
         local graph = player.sg ~= nil and player.sg.sg or nil
@@ -239,7 +273,7 @@ function Bridge.Install(api)
         local monitor = { cycle = 0, hungry = false, attacked = 0 }
         if player.PerformPreviewBufferedAction ~= nil then
             BindObserver(player, "PerformPreviewBufferedAction", "_dst_haptics_preview", function(inst)
-                if not IsInstalled() then return end
+                if not IsAttached() then return end
                 -- All new previews end a previous server-repeat context, even
                 -- when they are instant actions outside the five wrapped states.
                 work_contexts[inst] = nil
@@ -250,10 +284,10 @@ function Bridge.Install(api)
                     capture.awaiting_preview = false
                     captures[inst] = capture
                 end
-            end)
+            end, resources.records)
         end
         Listen(player, "actionfailed", function(inst, data)
-            if not IsInstalled() then return end
+            if not IsAttached() then return end
             local capture, context = captures[inst], work_contexts[inst]
             if capture ~= nil and (data == nil or data.action == nil or data.action == capture.action) then
                 captures[inst] = nil
@@ -261,10 +295,10 @@ function Bridge.Install(api)
             if context ~= nil and (data == nil or data.action == nil or data.action == context.action) then
                 work_contexts[inst] = nil
             end
-        end)
+        end, resources.listeners)
         local monitor_periodic = player.DoStaticPeriodicTask or player.DoPeriodicTask
         local monitor_task = monitor_periodic(player, 0.10, function(inst)
-            if not IsInstalled() or inst ~= G.ThePlayer or not IsValid(inst) then return end
+            if not IsAttached() or inst ~= G.ThePlayer or not IsValid(inst) then return end
             -- funnyidle's audited hungry branch plays this exact event. Its
             -- state hash alone also covers shivering/overheating/sanity idles;
             -- require the replicated hungry animation to identify the branch.
@@ -281,9 +315,9 @@ function Bridge.Install(api)
             if context ~= nil and (context.generation ~= Generation() or Now() - context.last_ack > 2
                 or not IsValid(context.target)) then work_contexts[inst] = nil end
         end)
-        if monitor_task ~= nil then tasks[#tasks + 1] = monitor_task end
+        resources.task = monitor_task
         Listen(player, "performaction", function(inst, data)
-            if not IsInstalled() or inst ~= G.ThePlayer then return end
+            if not IsAttached() or inst ~= G.ThePlayer then return end
             local capture = captures[inst]
             captures[inst] = nil
             local repeated = capture == nil
@@ -323,47 +357,59 @@ function Bridge.Install(api)
                 api.Emit(event, emitter, { source = source,
                     semantic_key = capture.kind .. "|" .. tostring(sequence) })
             end
-        end)
+        end, resources.listeners)
         Listen(player, "attacked", function(inst, data)
-            if inst ~= G.ThePlayer or not IsValid(inst) or IsHost(inst) or IsDeadPlayer(inst)
+            if not IsAttached() or inst ~= G.ThePlayer or not IsValid(inst) or IsHost(inst) or IsDeadPlayer(inst)
                 or data ~= nil and (data.redirected or data.noimpactsound)
                 or not ShouldBridge("hurt") or not CanObserve() or api.GetGeneration == nil then return end
             monitor.attacked = monitor.attacked + 1
             local sequence, generation = monitor.attacked, Generation()
             local function EmitGenericHit()
-                if inst ~= G.ThePlayer or not IsValid(inst) or IsHost(inst) or IsDeadPlayer(inst)
+                if not IsAttached() or inst ~= G.ThePlayer or not IsValid(inst) or IsHost(inst) or IsDeadPlayer(inst)
                     or not ShouldBridge("hurt") or not CanObserve() or generation ~= Generation() then return end
                 if api.HasRecentSpecialHurt ~= nil and api.HasRecentSpecialHurt(0.12) then return end
                 api.Emit("dontstarve/wilson/hit", inst,
                     { source = "replicated_hurt_approx", semantic_key = "attacked|" .. tostring(sequence) })
             end
             if inst.DoTaskInTime ~= nil then inst:DoTaskInTime(0.05, EmitGenericHit) end
-        end)
+        end, resources.listeners)
     end
-    AddPrefabPostInit("world", function(world)
-        if not IsInstalled() then return end
-        Listen(world, "playeractivated", function(_, player) AttachPlayer(player) end)
-        world:DoTaskInTime(0, function() AttachPlayer(G.ThePlayer) end)
-    end)
+    local function BindWorld(world)
+        if not IsInstalled() or world == nil or worlds[world]
+            or G.type(world.ListenForEvent) ~= "function" then return end
+        local resources = { listeners = {} }
+        local active = true
+        worlds[world] = resources
+        local function DetachWorld()
+            if not active then return end
+            active = false
+            RemoveListeners(resources.listeners)
+            local task = resources.task
+            if task ~= nil and task.Cancel ~= nil then pcall(task.Cancel, task) end
+            worlds[world] = nil
+            resources.listeners, resources.task, resources.cleanup = nil, nil, nil
+        end
+        resources.cleanup = DetachWorld
+        Listen(world, "onremove", DetachWorld, resources.listeners)
+        Listen(world, "playeractivated", function(_, player)
+            if active then AttachPlayer(player) end
+        end, resources.listeners)
+        if world.DoTaskInTime ~= nil then
+            resources.task = world:DoTaskInTime(0, function()
+                if active then AttachPlayer(G.ThePlayer) end
+            end)
+        end
+    end
+    AddPrefabPostInit("world", BindWorld)
     local function Cleanup()
         if closed then return end
         closed = true
-        for record in G.pairs(records) do
-            if record.owner == owner then record.observe, record.owner = nil, nil end
-        end
-        for i = 1, #listeners do
-            local binding = listeners[i]
-            if binding.entity.RemoveEventCallback ~= nil then
-                pcall(binding.entity.RemoveEventCallback, binding.entity, binding.event, binding.fn)
-            end
-        end
-        for i = 1, #tasks do
-            local task = tasks[i]
-            if task.Cancel ~= nil then pcall(task.Cancel, task) end
-        end
+        for _, resources in G.pairs(attached) do resources.cleanup() end
+        for _, resources in G.pairs(worlds) do resources.cleanup() end
+        ReleaseRecords(records)
         for inst in G.pairs(captures) do captures[inst] = nil end
         for inst in G.pairs(work_contexts) do work_contexts[inst] = nil end
-        records, listeners, tasks = {}, {}, {}
+        records = {}
         if adapter_state ~= nil and adapter_state.client_action_bridge_cleanup == Cleanup then
             adapter_state.client_action_bridge_installed = false
             adapter_state.client_action_bridge_cleanup = nil
@@ -373,6 +419,7 @@ function Bridge.Install(api)
         adapter_state.client_action_bridge_installed = true
         adapter_state.client_action_bridge_cleanup = Cleanup
     end
+    BindWorld(G.TheWorld)
     if G.ThePlayer ~= nil then AttachPlayer(G.ThePlayer) end
     return Cleanup
 end
