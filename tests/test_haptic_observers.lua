@@ -229,4 +229,63 @@ new_callback(new_fx)
 new_fx:Tick()
 assert(#new_fx.tasks == 1 and fresh.starts == 1 and retired.starts == 0,
     "retired observer callback claimed a new entity after reload")
+
+-- A development reload can leave this native FX and its sound alive. Its
+-- prefab postinit will not run again, so install must also visit existing Ents.
+local surviving = Entity()
+surviving.prefab = "shrouden_optic_blast_fx"
+surviving.playing.loop = true
+new_callback(surviving)
+surviving:Tick()
+for _, cleanup in ipairs(fresh.cleanups) do cleanup() end
+fresh.state.installed = false
+local unrelated, removed = Entity(), Entity()
+unrelated.prefab = "other_fx"
+removed.prefab, removed.valid = "shrouden_optic_blast_fx", false
+Ents = { [1] = surviving, [2] = unrelated, [3] = removed }
+local replacement = Harness(both)
+replacement.state.installed = true
+assert(module.Install(replacement.api))
+surviving:Tick()
+assert(replacement.starts == 1, "existing beam FX lost observation after reinstall")
+assert(#surviving.tasks == 2 and surviving.tasks[1].cancelled)
+local attempts_before_stale = #fresh.attempts
+surviving.tasks[1].fn(surviving)
+assert(#fresh.attempts == attempts_before_stale, "stale observer callback queried its retired API after rebind")
+assert(#unrelated.tasks == 0 and #removed.tasks == 0, "existing-entity scan attached an unrelated or invalid entity")
+-- No scan occurs in a periodic callback; later spawns still use prefab postinit.
+local later = Entity()
+later.prefab, later.playing.loop = "shrouden_optic_blast_fx", true
+Ents[4] = later
+surviving:Tick()
+assert(#later.tasks == 0, "observer scans Ents while polling")
+registrations[#registrations](later)
+assert(#later.tasks == 1)
+-- A late repeat of an old cleanup/callback must preserve newer ownership.
+for _, cleanup in ipairs(fresh.cleanups) do cleanup() end
+new_callback(surviving)
+local starts_after_rebind = replacement.starts
+surviving:Tick()
+assert(replacement.starts == starts_after_rebind and not surviving.tasks[2].cancelled)
+
+-- If an API becomes inactive before its cleanup runs, the install scan can
+-- retire that known stale task. Its eventual cleanup must preserve the new one.
+local stale = Harness(both)
+stale.state.installed = true
+Ents = nil
+assert(module.Install(stale.api))
+local takeover_fx = Entity()
+takeover_fx.prefab, takeover_fx.playing.loop = "shrouden_optic_blast_fx", true
+registrations[#registrations](takeover_fx)
+stale.state.installed = false
+Ents = { [1] = takeover_fx }
+local successor = Harness(both)
+successor.state.installed = true
+assert(module.Install(successor.api))
+assert(takeover_fx.tasks[1].cancelled and #takeover_fx.tasks == 2)
+for _, cleanup in ipairs(stale.cleanups) do cleanup() end
+takeover_fx:Tick()
+assert(successor.starts == 1 and not takeover_fx.tasks[2].cancelled,
+    "late retired-owner cleanup cancelled the successor's observer")
+Ents = nil
 print("haptic observer tests passed (simulated engine; no remote visibility or motor claim)")

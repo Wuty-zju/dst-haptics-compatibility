@@ -362,6 +362,45 @@ local world = {
 }
 world_postinit(world)
 assert(world.playeractivated ~= nil)
+world.ismastersim = false
+TheWorld = world
+local function ReplacementPlayer()
+    local replacement = Entity()
+    for key, value in pairs(player) do
+        if not key:find("_dst_haptics", 1, true) and key ~= "callbacks" and key ~= "listeners" then
+            replacement[key] = value
+        end
+    end
+    replacement.callbacks, replacement.listeners = {}, {}
+    replacement.PerformPreviewBufferedAction = player._dst_haptics_preview.original
+    return replacement
+end
+
+-- Seamless replacement (e.g. Wonkey) removes an old player without closing
+-- the world or bridge. Engine cancellation must also release our ownership.
+local removed_ref = setmetatable({}, { __mode = "v" })
+do
+    local old_player = ThePlayer
+    local removed = ReplacementPlayer()
+    ThePlayer = removed
+    world.playeractivated(world, removed)
+    local removed_task = monitor_tasks[#monitor_tasks]
+    removed_ref[1] = removed
+    removed.valid = false
+    if removed.listeners.onremove ~= nil then removed.listeners.onremove(removed) end
+    assert(removed_task.cancelled, "removed player's monitor was not cancelled")
+    assert(removed._dst_haptics_preview.observe == nil, "removed player's preview observer stayed active")
+    -- EntityScript:Remove then clears callbacks and cancels entity-owned tasks.
+    removed.callbacks, removed.listeners = {}, {}
+    removed_task:Cancel()
+    ThePlayer = old_player
+end
+collectgarbage("collect")
+collectgarbage("collect")
+assert(removed_ref[1] == nil, "bridge retained a removed player until full shutdown")
+local count_after_removal = #emitted
+Start("mine_start", "MINE", weapon); Ack(); RunQueued()
+assert(#emitted == count_after_removal + 1, "old player removal disabled the active player's shared SG observer")
 
 -- Rebinding replaces observers, rather than nesting SG/preview wrappers. Old
 -- postinit callbacks/listeners cannot reclaim them after their API shuts down.
@@ -376,6 +415,7 @@ fresh_api.IsInstalled = nil -- exercise the GetState().installed fallback
 fresh_api.GetState = function() return fresh_state end
 local fresh_cleanup = assert(Bridge.Install(fresh_api))
 assert(Bridge.Install(fresh_api) == fresh_cleanup, "same installation did not return its cleanup")
+local rebound_activation = assert(world.playeractivated, "reinstall did not bind the existing world")
 original_postinit(sg) -- an old mod callback must not take back the observer
 assert(sg.states.mine_start.onenter == state_wrapper and player.PerformPreviewBufferedAction == preview_wrapper,
     "bridge reinstall stacked wrappers")
@@ -386,10 +426,49 @@ assert(#emitted == before_reinstall + 1, "same-VM reinstall lost work captures o
 stategraph_postinit(sg)
 assert(sg.states.mine_start.onenter == state_wrapper, "later postinit nested the already rebound graph")
 cleanup() -- late old cleanup must preserve the fresh installation's records
-assert(monitor_tasks[1].cancelled == true and world.playeractivated == nil)
+assert(monitor_tasks[1].cancelled == true and world.playeractivated == rebound_activation)
 before_reinstall = #emitted
 Start("mine_start", "MINE", weapon); Ack(); RunQueued()
 assert(#emitted == before_reinstall + 1, "old cleanup removed the new observer")
+-- No world prefab postinit is rerun during reload: replacement activation must
+-- reach the newly installed bridge through the existing world binding.
+do
+    local replacement = ReplacementPlayer()
+    ThePlayer = replacement
+    world.playeractivated(world, replacement)
+    assert(replacement.callbacks.performaction and #replacement.callbacks.performaction == 1)
+    replacement.bufferedaction = Action("MINE", weapon)
+    authoritative_state = "mine"
+    local before_swap = #emitted
+    sg.states.mine_start.onenter(replacement)
+    replacement:ClearBufferedAction()
+    replacement.listeners.performaction(replacement)
+    RunQueued()
+    assert(#emitted == before_swap + 1, "replacement player was not observed after existing-world reinstall")
+    replacement.valid = false
+    replacement.listeners.onremove(replacement)
+    ThePlayer = player
+end
+local removed_world_ref = setmetatable({}, { __mode = "v" })
+do
+    local retired_world = {
+        ListenForEvent = world.ListenForEvent,
+        RemoveEventCallback = world.RemoveEventCallback,
+        DoTaskInTime = function(self, _, fn)
+            self.initial_task = { fn = fn, Cancel = function(self) self.cancelled = true end }
+            return self.initial_task
+        end,
+    }
+    world_postinit(retired_world)
+    removed_world_ref[1] = retired_world
+    retired_world.onremove(retired_world)
+    assert(retired_world.playeractivated == nil and retired_world.onremove == nil,
+        "removed world retained bridge callbacks")
+    assert(retired_world.initial_task.cancelled, "removed world retained its initial attach task")
+end
+collectgarbage("collect")
+collectgarbage("collect")
+assert(removed_world_ref[1] == nil, "bridge retained a removed world until shutdown")
 fresh_cleanup(); fresh_cleanup()
 assert(monitor_tasks[#monitor_tasks].cancelled == true)
 ExpectNoOutput(function() Start("mine_start", "MINE", weapon); Ack(); player.monitor(player); RunQueued() end,
