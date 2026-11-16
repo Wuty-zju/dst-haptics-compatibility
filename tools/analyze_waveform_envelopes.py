@@ -55,6 +55,8 @@ def rms_bins(path: Path, bin_seconds: float = 0.05):
         chunk = samples[start:start + size]
         result.append(math.sqrt(sum(value * value for value in chunk) / len(chunk)))
     peak = max(result) if result else 1
+    if peak == 0:
+        return result
     return [value / peak for value in result]
 
 
@@ -67,8 +69,12 @@ def main():
     out = args.out.resolve()
     if not wav_root.exists():
         raise SystemExit(f"haptic WAV directory not found: {wav_root}; pass --wav-root or set DST_HAPTICS_WAV_ROOT")
+    if out.exists():
+        raise SystemExit(f"Envelope output already exists; choose a new evidence file: {out}")
     result = {}
-    paths = list(wav_root.glob("*.wav"))
+    paths = sorted(wav_root.glob("*.wav"))
+    if not paths:
+        raise SystemExit(f"No WAV files found: {wav_root}")
     for family, prefixes in FAMILIES.items():
         selected = [path for path in paths if any(path.name.lower().startswith(prefix) for prefix in prefixes)]
         envelopes = [rms_bins(path) for path in selected]
@@ -84,7 +90,8 @@ def main():
             "envelope": median,
         }
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    with out.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(result, ensure_ascii=False, indent=2))
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
