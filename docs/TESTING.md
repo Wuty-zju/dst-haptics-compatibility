@@ -47,11 +47,15 @@ python tools/audit_haptics.py --scripts $scripts --wav-root "<DST>/data/haptics/
 python tools/analyze_waveform_envelopes.py --wav-root "<DST>/data/haptics/vibration/vibration" --out .local/evidence/new-audit/core_envelopes.json
 ```
 
-审计先屏蔽Lua行/块注释并保留行号。当前406个唯一event有字面引用、97个没有；
-历史407/96含已注释Charlie death。字面引用与文件名相似度都不能证明实际客户端触发
+审计匹配注释外的完整Lua字符串并保留起始行号。当前404个唯一event有静态引用、99个没有；
+历史406/97含较长音效名的前缀误匹配，407/96还含已注释Charlie death。字面引用与文件名相似度都不能证明实际客户端触发
 或精确event→WAV bank映射。
 原有 `build_haptics_report.py` 的机制说明模板包含历史实现描述，不能未经逐项复审
 就把它输出为新版本的完整保真结论。新数据先生成带 hash/build 的快照摘要。
+
+1.6.1补充世界/玩家/光束/暂停屏幕的同VM重装、旧owner迟到清理、移除对象GC、
+完整字符串匹配及静音/空输入回归。审计输出目录和包络输出文件必须为新路径；
+已有输出明确拒绝覆盖，零解析定义或无可读WAV明确失败。18项Python回归通过。
 
 ## Physical acceptance / 物理验收
 

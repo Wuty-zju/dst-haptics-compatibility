@@ -2,6 +2,10 @@
 
 Code support means DST recognizes the device type and exposes it through `TheInputProxy`. Physical acceptance additionally requires a real motor test on that route; Lua cannot infer it.
 
+1.6.1 (2026-11-17): lifecycle ownership, GC and current-native regressions pass.
+No new physical or in-game acceptance was performed. The newest available client
+log remains the November 7 session loading 1.5.0; pending routes stay pending.
+
 1.6.0 (2026-11-15): current-native data and simulated integration checks were rerun,
 including strict defaults, server pause and beam observers. No new game launch or
 physical motor acceptance was performed for 1.6.0. All physical pending routes below

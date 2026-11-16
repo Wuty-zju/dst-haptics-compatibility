@@ -1,4 +1,4 @@
-# Architecture / 架构 — 1.6
+# Architecture / 架构 — 1.6.x
 
 ## Contract / 语义契约
 
@@ -73,6 +73,7 @@ FrontEnd/FocalPoint本地声音不走世界距离；player_only资格先于UI非
 - 循环贡献分别结束，混合为O(n log n)最大值包络；短强效果不继承长弱效果的时长。
 - 显式校准请求在暂停中不输出；可等待恢复一次，10秒过期、设置变化/玩家退出会取消。
 - Shutdown撤销自身钩子与任务，保留其他Mod后来包装的函数；重复Install更新配置，不重复加worker。
+- 1.6.1把玩家/世界监听与任务归属到实体，onremove即释放引用；旧API关闭/设置调用失效。安装时重绑当前世界、存活光束和暂停屏幕，现有实体/屏幕只访问一次，不进入轮询或声音热路径。
 
 ## Controllers and language / 手柄与语言
 

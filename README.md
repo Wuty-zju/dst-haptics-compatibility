@@ -19,7 +19,7 @@
 `haptics.lua`，将可观察的原版声音与经过审计的动作反馈送往
 `TheInputProxy`；服务器和其他玩家无需安装。
 
-> **GitHub 稳定版：[1.6.0](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/tag/v1.6.0)。**
+> **GitHub 稳定版：[1.6.1](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/tag/v1.6.1)。**
 > 已核对 DST 762172 / Steam build 26474873 的 506 条定义、503 个唯一事件。
 > 创意工坊版本以上传者实际更新为准；GitHub 发版不会自动更新工坊。
 
@@ -36,6 +36,10 @@
 
 “原版表包含这个事件”不等于“远程客户端一定能观察它”。新增 14 个事件的实际来源、
 服务器/客户端边界和覆盖状态见 [1.6.0 触发路径审计](docs/audit/1.6.0-trigger-paths.md)。
+
+1.6.1 是现有行为的维护版本：修复重装后的世界、玩家、光束和暂停设置所有权，
+及时释放移除实体的引用；保留所有设置与严格默认。完整审查范围、修复依据与未改理由见
+[1.6.1 审查报告](docs/reports/1.6.1-review.md)。
 
 ## 安装
 

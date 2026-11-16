@@ -44,41 +44,62 @@ function RuntimeSettings.Install(api, config, modname, read_config, L)
         G.TheFrontEnd:PushScreen(Screen(modname, true))
     end
 
-    local function InstallPauseShortcut(path)
-        AddClassPostConstruct(path, function(screen)
-            if state ~= nil and state.installed == false then return end
-            if screen._dst_haptics_settings_shortcut then
-                return
-            end
-            screen._dst_haptics_settings_shortcut = true
-
+    local shortcut_owner = {}
+    local shortcuts = G.setmetatable({}, { __mode = "k" })
+    local function BindPauseShortcut(screen)
+        if state ~= nil and state.installed == false then return end
+        local binding = screen._dst_haptics_settings_shortcut
+        if type(binding) ~= "table" then
+            binding = {}
+            screen._dst_haptics_settings_shortcut = binding
             local original_control = screen.OnControl
-            screen.OnControl = function(self, control, down)
-                if (state == nil or state.installed ~= false) and not down and control == G.CONTROL_MENU_MISC_2 then
-                    OpenSettings()
+            screen.OnControl = function(self, control, down, ...)
+                if binding.active ~= nil and binding.active() and not down and control == G.CONTROL_MENU_MISC_2 then
+                    binding.open()
                     return true
                 end
-                return original_control(self, control, down)
+                return original_control(self, control, down, ...)
             end
-
             local original_help = screen.GetHelpText
             screen.GetHelpText = function(self)
                 local text = original_help ~= nil and original_help(self) or ""
-                if (state == nil or state.installed ~= false) and G.TheInput ~= nil
-                    and G.TheInput.ControllerAttached ~= nil and G.TheInput:ControllerAttached() then
-                    local id = G.TheInput:GetControllerID()
-                    local prompt = G.TheInput:GetLocalizedControl(id, G.CONTROL_MENU_MISC_2)
-                        .. " "
-                        .. L(config.language, "settings_title")
-                    return text ~= "" and (text .. "  " .. prompt) or prompt
+                if binding.active ~= nil and binding.active() then
+                    local prompt = binding.prompt()
+                    if prompt ~= nil then return text ~= "" and (text .. "  " .. prompt) or prompt end
                 end
                 return text
             end
-        end)
+        end
+        binding.owner = shortcut_owner
+        binding.active = function() return state == nil or state.installed ~= false end
+        binding.open = OpenSettings
+        binding.prompt = function()
+            if G.TheInput ~= nil and G.TheInput.ControllerAttached ~= nil and G.TheInput:ControllerAttached() then
+                local id = G.TheInput:GetControllerID()
+                return G.TheInput:GetLocalizedControl(id, G.CONTROL_MENU_MISC_2) .. " " .. L(config.language, "settings_title")
+            end
+        end
+        shortcuts[binding] = true
     end
 
-    InstallPauseShortcut("screens/redux/pausescreen")
-    InstallPauseShortcut("screens/pausescreen")
+    AddClassPostConstruct("screens/redux/pausescreen", BindPauseShortcut)
+    AddClassPostConstruct("screens/pausescreen", BindPauseShortcut)
+    -- FrontEnd.screenstack and the native PauseScreen name are present in the
+    -- current game. Rebind open screens once; never scan during input/update.
+    if G.TheFrontEnd ~= nil and type(G.TheFrontEnd.screenstack) == "table" then
+        for _, screen in G.ipairs(G.TheFrontEnd.screenstack) do
+            if screen.name == "PauseScreen" then BindPauseShortcut(screen) end
+        end
+    end
+    if api.AddCleanup ~= nil then
+        api.AddCleanup(function()
+            for binding in pairs(shortcuts) do
+                if binding.owner == shortcut_owner then
+                    binding.owner, binding.active, binding.open, binding.prompt = nil, nil, nil, nil
+                end
+            end
+        end)
+    end
 
     -- Keyboard access is useful when Steam Input has temporarily switched the
     -- active device. Controller users can use MENU_MISC_2 from the pause menu.

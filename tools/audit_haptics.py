@@ -24,7 +24,7 @@ FIELD_RE = re.compile(r"(\w+)\s*=\s*(\"[^\"]*\"|true|false|-?\d+(?:\.\d+)?)")
 # shifting line numbers. Literal references inside disabled SG blocks are not
 # producer evidence. This remains a static reference audit, not a Lua call graph.
 LUA_TOKEN_RE = re.compile(
-    r'''"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\[(=*)\[[\s\S]*?\]\1\]|--\[(=*)\[[\s\S]*?\]\2\]|--[^\n]*'''
+    r'''"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\[(=*)\[[\s\S]*?\]\1\]|--\[(=*)\[[\s\S]*?\]\2\]|--[^\n]*'''
 )
 
 
@@ -33,6 +33,48 @@ def strip_lua_comments(text: str) -> str:
         lambda match: re.sub(r"[^\n]", " ", match[0]) if match[0].startswith("--") else match[0],
         text,
     )
+
+
+def lua_string_literals(text: str):
+    """Yield complete Lua 5.1 string values and their opening source lines.
+
+    A literal may be data rather than a sound producer. Do not inspect strings
+    embedded inside another string, or infer concatenated/dynamic event values.
+    """
+    escapes = {"a": "\a", "b": "\b", "f": "\f", "n": "\n",
+               "r": "\r", "t": "\t", "v": "\v"}
+
+    def unescape(match):
+        value = match[0][1:]
+        if value.isascii() and value.isdigit():
+            number = int(value)
+            if number > 255:
+                raise ValueError("invalid Lua 5.1 decimal escape")
+            return chr(number)
+        if value in ("\r\n", "\n\r", "\r", "\n"):
+            return "\n"
+        return escapes.get(value, value)
+
+    line, previous = 1, 0
+    for match in LUA_TOKEN_RE.finditer(text):
+        line += text.count("\n", previous, match.start())
+        previous = match.start()
+        token = match[0]
+        if token.startswith("--"):
+            continue
+        if token[0] in ('"', "'"):
+            try:
+                value = re.sub(r"\\(?:[0-9]{1,3}|\r\n|\n\r|[\s\S])", unescape, token[1:-1])
+            except ValueError:
+                continue
+        else:
+            delimiter = re.match(r"\[(=*)\[", token)
+            width = len(delimiter[0])
+            value = token[width:-width]
+            value = re.sub(r"\r\n|\n\r|\r", "\n", value)
+            if value.startswith("\n"):
+                value = value[1:]
+        yield value, line
 
 
 def parse_value(raw: str):
@@ -82,7 +124,11 @@ def main():
         raise SystemExit(f"haptics.lua not found: {haptics}; pass --scripts or set DST_ORIGINAL_SCRIPTS")
     if not wav_root.exists():
         raise SystemExit(f"haptic WAV directory not found: {wav_root}; pass --wav-root or set DST_HAPTICS_WAV_ROOT")
-    out.mkdir(parents=True, exist_ok=True)
+    if out.exists():
+        raise SystemExit(f"Audit output already exists; choose a new evidence directory: {out}")
+    wav_paths = sorted(wav_root.glob("*.wav"))
+    if not wav_paths:
+        raise SystemExit(f"No WAV files found: {wav_root}")
     effects = []
     for lineno, line in enumerate(strip_lua_comments(haptics.read_text(encoding="utf-8-sig")).splitlines(), 1):
         if line.lstrip().startswith("--"):
@@ -94,6 +140,8 @@ def main():
         for key, raw in FIELD_RE.findall(match.group(2)):
             fields[key] = parse_value(raw)
         effects.append(fields)
+    if not effects:
+        raise SystemExit(f"No haptics definitions parsed from {haptics}; check the input and table format")
 
     sources = []
     for path in scripts.rglob("*.lua"):
@@ -101,16 +149,18 @@ def main():
             continue
         try:
             text = path.read_text(encoding="utf-8-sig", errors="ignore")
-            lines = strip_lua_comments(text).splitlines()
         except OSError:
             continue
-        sources.append((path, lines))
+        sources.append((path, text))
 
     wavs = []
-    for path in wav_root.glob("*.wav"):
+    for path in wav_paths:
         info = waveform_info(path)
         info.update(path=str(path), name=path.name, tokens=sorted(normalized_tokens(path.stem)))
         wavs.append(info)
+    durations = [wav["duration"] for wav in wavs if wav.get("duration") is not None]
+    if not durations:
+        raise SystemExit(f"No readable WAV files found: {wav_root}")
 
     unique = {}
     duplicate_defs = defaultdict(list)
@@ -119,15 +169,15 @@ def main():
         unique[effect["event"]] = effect
 
     references = defaultdict(list)
-    event_pattern = re.compile("|".join(re.escape(event) for event in sorted(unique, key=len, reverse=True)))
-    for path, lines in sources:
+    for path, text in sources:
         relative = str(path.relative_to(scripts)).replace("\\", "/")
-        for lineno, line in enumerate(lines, 1):
-            for match in event_pattern.finditer(line):
-                references[match.group(0)].append({
+        lines = text.splitlines()
+        for value, lineno in lua_string_literals(text):
+            if value in unique:
+                references[value].append({
                     "file": relative,
                     "line": lineno,
-                    "text": line.strip(),
+                    "text": lines[lineno - 1].strip(),
                 })
 
     rows = []
@@ -179,13 +229,16 @@ def main():
         "player_only": [effect for effect in effects if effect.get("player_only") is True],
         "with_literal_references": sum(row["reference_count"] > 0 for row in rows),
         "without_literal_references": sum(row["reference_count"] == 0 for row in rows),
+        "reference_scope": "Complete Lua string values outside comments; static data references do not prove a sound producer or client observability.",
         "with_waveform_candidates": sum(bool(row["waveforms"]) for row in rows),
         "wav_count": len(wavs),
         "wav_durations": {
-            "min": min(wav["duration"] for wav in wavs if wav.get("duration") is not None),
-            "max": max(wav["duration"] for wav in wavs if wav.get("duration") is not None),
+            "min": min(durations),
+            "max": max(durations),
         },
     }
+    # Exclusive creation also closes a race with a second audit using this path.
+    out.mkdir(parents=True)
     (out / "audit.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
     (out / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2, default=dict), encoding="utf-8")
     (out / "waveforms.json").write_text(json.dumps(wavs, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -73,6 +73,11 @@ pwsh -File tools/build_release.ps1 -OutputRoot build/new-candidate-session
 移动后重新核对。只归档，不永久删除；有历史 `.git` 的 clone 整体保留。
 外部 `DST Mod Backups` 的卸载备份保持原位置。
 
+2026-11-17将已结束的build/candidate-1.6.0-final与build/workspace-check-20261115
+共45个文件移至archive/2026-11-17/build，移动后逐项核对大小/SHA-256，路径映射保存在
+archive/2026-11-17/manifest.json。outputs/1.6.0、全部原始证据及历史工作树未移动；本版开发使用
+独立161工作树，候选包使用新build路径。
+
 恢复某项时按 manifest 对照，先核对 hash，再复制到新目录；不要覆盖当前分支源码。
 归档中的旧 clone 不再作为工作区。`outputs/` 内的最终发布收据已另存成可跟踪的
 [历史发布凭证](../reports/1.5.0-release-receipt.md)。

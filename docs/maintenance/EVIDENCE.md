@@ -1,6 +1,6 @@
 # 证据索引 / Evidence register
 
-复核日期：2026-11-15。维护基线：Mod `v1.5.0` / `cd4f1a2`。
+复核日期：2026-11-17。历史维护起点：Mod `v1.5.0` / `cd4f1a2`；本次起点v1.6.0/main-fef26ea。
 本索引记录结论的来源和边界，不把聊天或报告中的断言自动升级成复测证据。
 
 | ID | 结论 | 证据类别与日期 | 材料 / 局限 |
@@ -20,6 +20,9 @@
 | E13 | 当前Steam build26474873被官方接口确认为最新可列出版本 | 11月15日UpToDateCheck直接响应 | success/up_to_date/version_is_listable均true；本地pr1-merge-review/steam-up-to-date.json |
 | E14 | 1.6重构的原版数据、集成与语言回归 | 新版本审核和CI | [1.6审核](../reports/1.6.0-review.md)；光束远程句柄可见性和物理体感尚未实测 |
 | E15 | 1.6.0正式发布，线上附件已重新下载并核对 | 11月15日GitHub API、工作流、下载hash和Git blob比较 | [发布凭证](../reports/1.6.0-release-receipt.md)；不代表已经更新Steam Workshop |
+| E16 | 当前输入不变；完整字面量审计404有引用、99没有，14新事件来源不变 | 11月17日新采集/hash、Steam接口及修正审计 | [1.6.1复审](../reports/1.6.1-review.md)；旧406/97包含前缀误计，不覆盖历史证据 |
+| E17 | 同VM旧API、实体引用/观察和暂停屏幕缺陷已复现并修复 | 四条独立PR、回归和集成验证 | 17 PASS、18项Python；没有新1.6.x实机日志或马达验收 |
+| E18 | 两份旧候选构建归档后内容不变 | 11月17日45文件大小和SHA-256复验 | archive/2026-11-17/manifest.json；outputs和原始证据保持原位 |
 
 ## 输入和成品哈希
 
