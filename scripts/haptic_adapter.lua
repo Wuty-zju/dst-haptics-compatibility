@@ -439,11 +439,22 @@ function Adapter.Install(config, LoadLocalModule)
 
     -- World removal is the one lifecycle boundary where stopping every vibration
     -- is desirable: no controller output may leak into the loading/frontend state.
-    AddPrefabPostInit("world", function(inst)
-        inst:ListenForEvent("playeractivated", function(_, player)
-            if player == G.ThePlayer then state.player_active = true end
-        end)
+    local world_bindings = {}
+    local function DetachWorld(inst)
+        local callbacks = world_bindings[inst]
+        if callbacks == nil then return end
+        world_bindings[inst] = nil
+        if inst.RemoveEventCallback ~= nil then
+            for event, callback in pairs(callbacks) do inst:RemoveEventCallback(event, callback) end
+        end
+    end
+    local function BindWorld(inst)
+        -- Postinit callbacks remain registered in the VM after Shutdown. Never
+        -- let an inactive owner attach listeners to the next world.
+        if not state.installed or world_bindings[inst] ~= nil then return end
+        local callbacks = {}
         local function CancelOutput(clear)
+            if not state.installed then return end
             state.generation = state.generation + 1
             state.loop_revision = state.loop_revision + 1
             state.had_loop_output = false
@@ -455,24 +466,37 @@ function Adapter.Install(config, LoadLocalModule)
             end
             pcall(function() G.TheInputProxy:StopVibration() end)
         end
-        inst:ListenForEvent("serverpauseddirty", function(_, data)
+        callbacks.playeractivated = function(_, player)
+            if state.installed and player == G.ThePlayer then state.player_active = true end
+        end
+        callbacks.serverpauseddirty = function(_, data)
+            if not state.installed then return end
             data = data or {}
             state.server_paused = data.pause or data.autopause or data.gameautopause or false
             if state.server_paused and OutputMode() ~= "native" then CancelOutput(false) end
-        end)
-        inst:ListenForEvent("playerdeactivated", function(_, player)
-            if player == G.ThePlayer then
+        end
+        callbacks.playerdeactivated = function(_, player)
+            if state.installed and player == G.ThePlayer then
                 state.player_active = false
                 CancelOutput(true)
             end
-        end)
-        inst:ListenForEvent("onremove", function()
+        end
+        callbacks.onremove = function()
             CancelOutput(true)
             state.server_paused = false
             state.player_active = nil
             state.last_controller_id = nil
-        end)
-    end)
+            state.listener_position = nil
+            DetachWorld(inst)
+        end
+        world_bindings[inst] = callbacks
+        for event, callback in pairs(callbacks) do inst:ListenForEvent(event, callback) end
+    end
+    AddPrefabPostInit("world", BindWorld)
+    if G.TheWorld ~= nil then BindWorld(G.TheWorld) end
+    state.cleanups[#state.cleanups + 1] = function()
+        for inst in pairs(world_bindings) do DetachWorld(inst) end
+    end
 
     state.api =
     {
@@ -513,6 +537,8 @@ function Adapter.Install(config, LoadLocalModule)
             return true
         end,
         Shutdown = function()
+            if not state.installed then return end
+            state.installed = false
             state.generation, state.loop_revision = state.generation + 1, state.loop_revision + 1
             state.loops = {}
             state.pending_test = nil
@@ -553,6 +579,7 @@ function Adapter.Install(config, LoadLocalModule)
             return true
         end,
         ApplyConfig = function(values)
+            if not state.installed then return end
             -- A settings change invalidates old envelope tails immediately.
             state.generation = state.generation + 1
             state.loop_revision = state.loop_revision + 1

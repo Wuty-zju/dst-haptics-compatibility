@@ -12,12 +12,14 @@ local native_enable_calls = {}
 local delayed = {}
 local periodic = {}
 local world_postinit = nil
+local world_postinits = {}
 
 function GetTimeRealSeconds() return now end
 function IsPaused() return paused end
 function AddPrefabPostInit(name, fn)
     assert(name == "world")
     world_postinit = fn
+    world_postinits[#world_postinits + 1] = fn
 end
 
 scheduler = {}
@@ -654,5 +656,65 @@ now = now + 1
 SoundEmitter.PlaySound(player_emitter, "test/player")
 assert(SoundEmitter.PlaySound == later_wrapper and #vibrations == before)
 assert(native_enable_calls[#native_enable_calls] == true, "shutdown did not restore native preference")
+
+-- Prefab postinits survive a same-VM reinstall, just as another mod's wrapper
+-- can keep an old adapter alive. Only the current owner may touch output.
+local function LiveWorld()
+    local inst = { callbacks = {} }
+    function inst:ListenForEvent(event, fn)
+        local callbacks = self.callbacks[event] or {}
+        self.callbacks[event] = callbacks
+        callbacks[#callbacks + 1] = fn
+    end
+    function inst:RemoveEventCallback(event, fn)
+        local callbacks = self.callbacks[event] or {}
+        for i = #callbacks, 1, -1 do
+            if callbacks[i] == fn then table.remove(callbacks, i) end
+        end
+    end
+    function inst:PushEvent(event, data)
+        local pending = {}
+        for i, fn in ipairs(self.callbacks[event] or {}) do pending[i] = fn end
+        for _, fn in ipairs(pending) do fn(self, data) end
+    end
+    function inst:CallbackCount()
+        local total = 0
+        for _, callbacks in pairs(self.callbacks) do total = total + #callbacks end
+        return total
+    end
+    return inst
+end
+TheWorld = nil
+local fresh_api = Adapter.Install({ language = "en", strength = 1 }, LoadLocalModule)
+local live_world = LiveWorld()
+TheWorld = live_world
+for _, postinit in ipairs(world_postinits) do postinit(live_world) end
+assert(live_world:CallbackCount() == 4, "inactive adapter attached world listeners")
+local old_stops = stop_count
+live_world:PushEvent("serverpauseddirty", { pause = true })
+assert(stop_count == old_stops + 1, "inactive world callback cancelled the new adapter's output")
+live_world:PushEvent("serverpauseddirty", { pause = false })
+old_stops = stop_count
+api.Shutdown()
+assert(stop_count == old_stops, "repeated shutdown of an old owner stopped the current adapter")
+api.ApplyConfig({ language = "zh" })
+assert(stop_count == old_stops, "old settings callback stopped the current adapter")
+fresh_api.Shutdown()
+assert(live_world:CallbackCount() == 0, "shutdown retained world listeners")
+old_stops = stop_count
+live_world:PushEvent("onremove")
+assert(stop_count == old_stops, "shut-down world callback still changed output")
+
+-- Reload while a world already exists must bind it immediately, without
+-- depending on another prefab creation. Historical postinits stay inert.
+local rebound_api = Adapter.Install({ language = "en", strength = 1 }, LoadLocalModule)
+assert(live_world:CallbackCount() == 4, "existing world was not rebound on reinstall")
+for _, postinit in ipairs(world_postinits) do postinit(live_world) end
+assert(live_world:CallbackCount() == 4, "world callbacks were installed twice")
+rebound_api.GetState().listener_position = { 1000, 0, 1000 }
+live_world:PushEvent("onremove")
+assert(live_world:CallbackCount() == 0, "removed world retained adapter callbacks")
+assert(rebound_api.GetState().listener_position == nil, "world unload retained the old listener position")
+rebound_api.Shutdown()
 
 print("adapter behavior tests passed")

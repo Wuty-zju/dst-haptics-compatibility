@@ -97,8 +97,8 @@ function M.Get(effect)
         return { pulses = { { 0, 0.060, 0.72 } }, total = 0.060 }
     end
 
-    -- audio=false does not mean haptics=false. Hungry has no sound callback at
-    -- all, but the original package contains a long, multi-crest waveform.
+    -- audio=false does not mean haptics=false. The native funnyidle hungry
+    -- branch still calls PlaySound; the waveform has several distinct crests.
     if Contains(event, "wilson/hungry") then
         return AssetProfile("hungry", 0.82, "danger")
     end
