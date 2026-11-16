@@ -44,11 +44,13 @@ end
 local applied = {}
 local test_pulses = {}
 local state = {}
+local cleanups = {}
 local api =
 {
     GetState = function() return state end,
     ApplyConfig = function(values) table.insert(applied, values) end,
     TestPulse = function(level) table.insert(test_pulses, level) end,
+    AddCleanup = function(callback) cleanups[#cleanups + 1] = callback end,
 }
 local config = { language = "zh", compatibility = true, strength = 1, calibration_test = "off" }
 local next_config = { language = "zh", compatibility = true, strength = 1, calibration_test = "off" }
@@ -112,5 +114,44 @@ key_handler()
 assert(string.find(logs[#logs], "unable to open in-world haptics settings", 1, true) ~= nil)
 assert(#pushed == 0)
 print = original_print
+
+-- Existing pause screens outlive a same-VM reload. Keep a later mod's wrapper
+-- and rebind its original shortcut to the new language/API instead of nesting.
+state.installed = false
+for _, cleanup in ipairs(cleanups) do cleanup() end
+local original_control, original_help = pause.OnControl, pause.GetHelpText
+local later_calls = 0
+pause.OnControl = function(...)
+    later_calls = later_calls + 1
+    return original_control(...)
+end
+local later_control = pause.OnControl
+pause.name = "PauseScreen"
+TheFrontEnd.screenstack = { pause }
+local replacement_state, replacement_cleanups = { installed = true }, {}
+local replacement_api = {
+    GetState = function() return replacement_state end,
+    ApplyConfig = function() end,
+    AddCleanup = function(callback) replacement_cleanups[#replacement_cleanups + 1] = callback end,
+}
+package.loaded["screens/redux/modconfigurationscreen"] = nil
+package.preload["screens/redux/modconfigurationscreen"] = function()
+    return function(modname) return { name = "ModConfigurationScreen", modname = modname } end
+end
+RuntimeSettings.Install(replacement_api, { language = "zh" }, "reloaded_mod", function() return {} end, L)
+assert(pause.OnControl == later_control and pause.GetHelpText == original_help,
+    "reinstall nested an existing pause shortcut or replaced another mod's wrapper")
+assert(pause:OnControl(CONTROL_MENU_MISC_2, false) == true and later_calls == 1,
+    "existing pause shortcut was not rebound after reinstall")
+assert(#pushed == 1 and pushed[1].modname == "reloaded_mod")
+assert(string.find(pause:GetHelpText(), "Triangle 震动设置", 1, true) ~= nil,
+    "reloaded pause shortcut retained the retired language")
+-- Even repeated, late cleanup from the old owner must preserve the new owner.
+for _, cleanup in ipairs(cleanups) do cleanup() end
+assert(string.find(pause:GetHelpText(), "Triangle 震动设置", 1, true) ~= nil)
+replacement_state.installed = false
+for _, cleanup in ipairs(replacement_cleanups) do cleanup() end
+assert(pause:OnControl(CONTROL_MENU_MISC_2, false) == false)
+assert(pause:GetHelpText() == "Cancel Back", "inactive pause shortcut still changed help text")
 
 print("runtime settings tests passed")
