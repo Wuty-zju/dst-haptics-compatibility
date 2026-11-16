@@ -1,4 +1,4 @@
-# Workshop listing / 创意工坊文案 — 1.6.0
+# Workshop listing / 创意工坊文案 — 1.6.1
 
 Existing item: https://steamcommunity.com/sharedfiles/filedetails/?id=3805091756
 
@@ -39,6 +39,8 @@ Core envelopes, spatial falloff and controller curves are approximations. Some s
 
 [url=https://github.com/Wuty-zju/dst-haptics-compatibility]Source, documentation and issues[/url]
 
-## 1.6.0 Change note
+## 1.6.1 Change note
 
-Refactored native registry/output/spatial/hooks/loops; audited 14 new events and actual producer sides; added conservative beam-handle observation; fixed weather loops, pause/player/device cancellation, action identity and observer reinstall. Strict defaults replace unproven combat/hurt guesses with optional estimates. Updated bilingual live settings and both READMEs. Physical route acceptance remains pending.
+维护现有行为：修复失活API干扰、世界/玩家观察资源清理、存活光束和暂停屏幕重装，纠正静态审计和证据覆盖。保留全部设置、严格默认、包络和设备曲线；未增加功能。实机验收仍待完成。
+
+Maintains existing behavior: fixes inactive API ownership, entity resource cleanup and surviving world/beam/pause-screen rebinding; corrects static evidence and protects prior reports. Settings, strict defaults, envelopes and device curves are retained. No new features or physical acceptance claims.

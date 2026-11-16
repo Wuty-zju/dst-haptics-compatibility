@@ -1,5 +1,16 @@
 # Changelog / 更新日志
 
+## 1.6.1 — 2026-11-17
+
+- 隔离失活适配器的 Shutdown/ApplyConfig，精确解绑世界监听；重装绑定已有世界，退出清除旧监听坐标。
+- 按玩家和世界管理动作桥资源；实体移除时释放监听、监控、捕获和引用，保留共享状态图及新所有者。
+- 安装时恢复仍存活光束的真实声音句柄观察；只扫描现有实体一次，不添加周期扫描或动画猜测。
+- 重绑已打开暂停界面的设置快捷键与语言，复用包装并保护其他 Mod 及新所有者。
+- 静态审计改为完整 Lua 字符串匹配：当前 404 个事件有字面引用、99 个没有；不再把较长音效名称的前缀当成当前事件。
+- 审计/包络证据拒绝覆盖；空输入、零解析定义明确失败，静音 PCM 包络不再除零。
+- Preserve existing event semantics, configuration keys/defaults, rumble curves and client-only boundaries. No new gameplay feedback or settings.
+- Add lifecycle/GC/owner-chain and evidence regressions. Native data remains 506 definitions/503 events; hardware and remote beam visibility remain separately unverified.
+
 ## 1.6.0 — 2026-11-15
 
 - Refactor the client pipeline into registry, device, spatial, hook, loop and action-confirmation modules; retain dynamic native definitions and client-only scope.

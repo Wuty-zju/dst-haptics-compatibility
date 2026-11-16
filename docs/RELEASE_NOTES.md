@@ -1,47 +1,48 @@
-# DST Haptics Compatibility 1.6.0
+# DST Haptics Compatibility 1.6.1
 
-1.6.0 rebuilds the client haptics pipeline around observable native events, explicit
-approximation boundaries and independently owned lifecycle modules.
+现有行为的稳定性维护版。保留 1.6.0 的事件资格、强度/时长、全部配置键与严格默认；
+不新增震动事件、设置、设备能力或游戏逻辑。
 
-## 更新 / Changes
+Maintenance of existing behavior: no new event mappings, settings, controller
+capabilities or gameplay changes. Saved configuration and strict defaults remain compatible.
 
-- 将原版索引、设备输出、空间资格、声音钩子、循环和工具确认从大适配器拆开；模块本地缓存，原版完整事件记录仍动态读取。
-- 核对当前DST762172 / Steam build26474873：506条定义、503唯一事件；审查14新增事件实际运行侧与来源，不把注释中的旧声音当producer。
-- 新增Shrouden光束真实loop/bigloop句柄观察；不从wide、smoke或动画猜起停，不播放额外声音。
-- 修复雨/冰雹、树冠和伞等10种无_LP持续声音的生命周期；修复同名替换、远端接近恢复和断连期间实体清理。
-- serverpauseddirty即时取消输出；静态调度保证暂停中热设置可用。玩家停用、设备切换与过期回调不复活旧尾段。
-- 修复普通攻击缺少invobject时的武器解析和动作取消/替换串扰，工具末击保留原版event。
-- 近战与受击近似补偿分别默认关闭：performaction不是命中证明，attacked不是普通hit原声证明。需要旧式补偿须显式开启；未知护甲和远程/特殊攻击保守跳过。
-- 统一中文/英文运行时提示和日志，缩短双语配置标签，保留旧配置键；语言与设置暂停中也可热切。
-- 重写中英文README，加入清晰安装、升级、配置、架构和边界说明；直接提供现有Steam Workshop项目链接。
-- 构建保持干净白名单、版本/tag一致性、SHA-256与先验证后发布。
+## 修复 / Fixes
 
-## Validation
+- 失活适配器不再因迟到的关闭/设置调用停止新实例；世界监听精确解绑，重装绑定当前世界，退出清除旧监听坐标。
+- 动作桥按玩家/世界释放监听、监控和引用，避免换身后长期持有移除对象；重装后仍能观察之后激活的本地玩家。
+- 存活光束重装后恢复真实loop/bigloop句柄观察；仅安装时访问现有实体，不添加周期扫描或动画猜测。
+- 已打开暂停界面的快捷键与中英文提示切换到当前实例；复用原包装，保留其他Mod及新所有者。
+- 静态审计匹配完整Lua字符串，纠正前缀误计；拒绝覆盖证据及空输入，静音WAV保留零包络。
 
-Checked against the installed current native scripts, Lua5.1 and simulated engine
-integration tests. Full per-definition tuning covers 506 definitions and 41,492
-assertions. CI validates portable behavior and the immutable Workshop package.
+Inactive adapters cannot stop a replacement. Entity-owned observers and references
+are released on removal. Existing worlds, beams and pause shortcuts rebind safely
+after reload without stacking wrappers. Audits use exact Lua literals and preserve
+prior evidence instead of overwriting it.
 
-See [the release review](https://github.com/Wuty-zju/dst-haptics-compatibility/blob/v1.6.0/docs/reports/1.6.0-review.md)
-and [native trigger audit](https://github.com/Wuty-zju/dst-haptics-compatibility/blob/v1.6.0/docs/audit/1.6.0-trigger-paths.md).
+## 验证 / Validation
 
-## Boundaries / 边界
+Four isolated fixes were reviewed in PRs #3–#6 before release integration.
+Local Lua 5.1 verification: **17 PASS, 0 FAIL, 0 SKIP**, including 506 native definitions,
+41,492 tuning assertions and 18 Python regression tests. Current input is still
+DST 762172 / Steam build 26474873; official Steam UpToDateCheck returned up_to_date=true.
 
-本版未新做完整物理手柄矩阵，不把自动测试当成马达体感或实际远程Boss验收。
-纯Lua仍不能逐采样复原Klei原始waveform；部分server-only一次性声音无客户端可证实信号。
-光束句柄observer为条件覆盖，仍需远程实机确认其可见性。
+The corrected static audit finds **404 referenced / 99 unreferenced** unique events;
+this is a source-reference correction, not a change to supported runtime events.
+All 14 newer definitions and their source locations remain unchanged.
 
-Strict defaults may produce less remote combat feedback than 1.5.0, deliberately
-avoiding unsupported generic hurt/material guesses. Optional estimates are labelled.
+[Detailed review / 详细审查](https://github.com/Wuty-zju/dst-haptics-compatibility/blob/v1.6.1/docs/reports/1.6.1-review.md)
+· [Native trigger audit / 原版路径](https://github.com/Wuty-zju/dst-haptics-compatibility/blob/v1.6.1/docs/audit/1.6.0-trigger-paths.md)
 
-DS4/DS5 require rumble support from DST or Steam Input. No adaptive triggers,
-DualSense high-frequency haptics or external bridge. Existing settings remain compatible.
+## 边界与安装 / Limits and installation
 
-## Install / 安装
+本轮没有新的1.6.x客户端日志或物理马达验收；最新保留日志是11月7日的1.5.0。
+自动回归不能证明USB/蓝牙体感、远程光束句柄可见性或每个Boss的局内触发。
+包络、空间和设备曲线仍为已披露近似，DS4/DS5需DST/Steam Input提供Legacy Rumble。
 
-Subscribe to [Workshop item 3805091756](https://steamcommunity.com/sharedfiles/filedetails/?id=3805091756),
-or verify/extract the named release ZIP into mods/dst_haptics_compat. Enable the mod
-and Controller Vibration. Avoid duplicate local/Workshop copies.
+No fresh game launch or physical controller test is claimed. Exact native waveforms
+and remote server-only event observability retain the documented limits.
 
-GitHub publication does not upload to Workshop. The Workshop author must update
-the existing item separately; do not create another item.
+Download the named release ZIP and checksum, or subscribe to
+[Workshop item 3805091756](https://steamcommunity.com/sharedfiles/filedetails/?id=3805091756).
+GitHub publication does not update Steam. The author must update this existing item
+separately; avoid duplicate manual/Workshop copies.

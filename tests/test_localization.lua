@@ -57,7 +57,9 @@ local info = {}
 local chunk = assert(loadfile(root .. "/modinfo.lua"))
 setfenv(chunk, info)
 chunk()
-assert(info.version == "1.6.0")
+-- Release automation checks tag equality; this sandbox contract must also
+-- accept the next valid maintenance version without duplicating that constant.
+assert(type(info.version) == "string" and info.version:match("^%d+%.%d+%.%d+$"))
 local options = {}
 for _, option in ipairs(info.configuration_options) do
     assert(not options[option.name], "duplicate option: " .. option.name)
