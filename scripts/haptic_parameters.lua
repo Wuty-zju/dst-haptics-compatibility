@@ -59,9 +59,10 @@ local POLICIES =
     end,
 }
 
--- weather.lua supplies normalized precipitation intensity on these handles.
+-- weather.lua and caveweather.lua set precipitation intensity on these handles.
 for _, event in G.ipairs({ "dontstarve/AMB/rain", "rifts3/lunarhail/lunar_rainAMB",
-    "dontstarve_DLC001/common/rain_on_tree", "rifts3/lunarhail/lunarhail_on_tree" }) do
+    "dontstarve_DLC001/common/rain_on_tree", "rifts3/lunarhail/lunarhail_on_tree",
+    "dontstarve/AMB/caves/rain" }) do
     POLICIES[event] = function(params) return Linear(params.intensity, 1, 0) end
 end
 
