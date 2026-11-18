@@ -26,9 +26,12 @@
   global settings, auto-switch it, or silently select a premium service tier.
 - The user authorizes bounded delegation when it materially helps. Use no agents
   for a small serial change; normally at most two active children per coordinator.
-- Preferred planning family: Astra, with high/xhigh/max only when warranted.
-  Preferred implementation/review family: Sol, normally high; increase effort for
-  demonstrated difficulty. Use model IDs actually offered by the current tool.
+- At each new assignment read the live spawn tool's model inventory. Use the newest
+  offered version of Astra for independent design or Sol for implementation/review.
+  Pass the exact model and effort explicitly on a fresh bounded assignment. Sol
+  normally starts at high. The coordinator selects xhigh/max when justified.
+  Re-check the inventory when resuming a task in another session or after an upgrade.
+  Role presets contain instructions only. See the coordination guide for handoffs.
 - Project custom agents are optional local-client presets, not a promise that every
   host exposes those role names. Use an explicit bounded prompt if unsupported.
 - Read-only exploration may share a checkout. Parallel writers need distinct

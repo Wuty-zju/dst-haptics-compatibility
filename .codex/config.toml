@@ -2,5 +2,5 @@
 # This is a per-session ceiling; cross-session ownership is coordinated in docs/tasks.
 [agents]
 max_concurrent_threads_per_session = 2
-default_subagent_model = "gpt-6.1-sol"
+# The coordinator selects an advertised family/version at dispatch.
 default_subagent_reasoning_effort = "high"

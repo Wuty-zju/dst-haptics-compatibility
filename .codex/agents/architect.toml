@@ -1,7 +1,5 @@
 name = "dst_architect"
 description = "Use on request for a difficult cross-module design or native-haptics investigation."
-model = "gpt-6-astra"
-model_reasoning_effort = "xhigh"
 developer_instructions = """
 Read AGENTS.md, docs/STATUS.md and the assigned task first. Investigate evidence and
 tradeoffs; do not edit runtime code, create further agents, publish, or change Git
