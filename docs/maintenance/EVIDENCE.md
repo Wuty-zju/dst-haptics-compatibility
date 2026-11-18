@@ -29,6 +29,7 @@
 | E22 | 切回原生发送多余 Stop、暂停校准跨设备、天气同帧重复重混以及洞穴雨固定增益 | Lua 5.1 修复前后回放，原生组件及状态图行号 | [四项独立复审](../reports/1.6.2-review.md)；调用次数和幅度属于代理测量 |
 | E23 | 当前原版 503 行全量表来自实际 Lua 包络与同一份原版输入，统计 30 个循环和 104 个 RMS 包络族事件 | 本机当前原版事件与运行时逐行核对 | [字段与统计](../audit/DST-Haptics-Audit-Summary-1.6.2.md)；[完整 CSV](../audit/DST-Haptics-Event-Audit-1.6.2.csv) |
 | E24 | 上版候选 26 个文件按清单归档。本机复核三个日期清单共 4,434 项与先前两个正式 ZIP 的 checksum | workspace-inventory.json，逐项 SHA-256 | 新归档清单在 archive/2026-11-18/manifest.json |
+| E25 | 1.6.2 标签和最终 PR 的代码树一致，线上三个附件的 hash 匹配。23 文件白名单通过，18 个 Lua 与标签逐字节一致 | GitHub Release、下载结果、本地校验、标签与 CI | [发布凭证](../reports/1.6.2-release-receipt.md) |
 
 ## 输入和成品哈希
 
