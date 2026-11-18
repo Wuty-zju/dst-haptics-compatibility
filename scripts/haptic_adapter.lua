@@ -95,7 +95,6 @@ function Adapter.Install(config, LoadLocalModule)
     local device = Device.New(state, Util, L)
     local space = Spatial.New(state, Util)
     local ProfileAllowsVibration, OutputMode = device.ProfileAllowsVibration, device.OutputMode
-    local GetControllerID, RefreshControllerOutput = device.GetControllerID, device.RefreshControllerOutput
     local OutputAllowed, SuppressNative = device.OutputAllowed, device.SuppressNative
     local GetOutputCalibration, CalibratePulse = device.GetOutputCalibration, device.CalibratePulse
     local MapIntensity, ChannelFor = device.MapIntensity, device.ChannelFor
@@ -173,13 +172,14 @@ function Adapter.Install(config, LoadLocalModule)
 
     local function AddPulse(channel, duration, magnitude, duration_scale, expected_generation)
         if magnitude <= 0 or duration <= 0 or duration_scale == 0 or not OutputAllowed() then
-            return
+            return false
         end
-        if expected_generation ~= nil and expected_generation ~= state.generation then return end
+        if expected_generation ~= nil and expected_generation ~= state.generation then return false end
         duration, magnitude = CalibratePulse(duration, magnitude, duration_scale)
         SuppressNative()
         G.TheInputProxy:AddVibration(channel, duration, magnitude, false)
         state.metrics.pulses = state.metrics.pulses + 1
+        return true
     end
 
     local function ScheduleProfile(effect, entity, profile, volume, spatial, distance, source, params)
@@ -250,6 +250,7 @@ function Adapter.Install(config, LoadLocalModule)
             return false
         end
         if not ProfileAllowsVibration() then
+            if state.output_was_allowed then OutputAllowed() end
             DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "profile_vibration_off", source)
             return false
         end
@@ -265,12 +266,11 @@ function Adapter.Install(config, LoadLocalModule)
             DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, profile.total, ChannelFor(effect, profile), true, "diagnostic_no_output", source, params, parameter_scale)
             return true
         end
-        local controller_id = GetControllerID()
-        if controller_id == nil then
-            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, "no_active_controller", source)
+        local allowed, reason = OutputAllowed()
+        if not allowed then
+            DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, reason, source)
             return false
         end
-        RefreshControllerOutput(controller_id)
         local now = Now()
         -- Sound hooks and replicated-action bridges can observe the same native
         -- event through different Lua paths. Keep this key deliberately small:
@@ -391,7 +391,10 @@ function Adapter.Install(config, LoadLocalModule)
             local allowed = OutputAllowed()
             local pending = state.pending_test
             if pending ~= nil then
-                if Now() > pending.expires then
+                local id = device.GetOutputController(true)
+                if Now() > pending.expires or G.ThePlayer ~= pending.player
+                    or id ~= pending.controller_id
+                    or G.TheInputProxy:GetInputDeviceType(id) ~= pending.controller_type then
                     state.pending_test = nil
                 elseif allowed then
                     state.pending_test = nil
@@ -437,8 +440,6 @@ function Adapter.Install(config, LoadLocalModule)
     end)
 
 
-    -- World removal is the one lifecycle boundary where stopping every vibration
-    -- is desirable: no controller output may leak into the loading/frontend state.
     local world_bindings = {}
     local function DetachWorld(inst)
         local callbacks = world_bindings[inst]
@@ -453,18 +454,14 @@ function Adapter.Install(config, LoadLocalModule)
         -- let an inactive owner attach listeners to the next world.
         if not state.installed or world_bindings[inst] ~= nil then return end
         local callbacks = {}
-        local function CancelOutput(clear)
+        local function CancelWorldOutput(clear)
             if not state.installed then return end
-            state.generation = state.generation + 1
-            state.loop_revision = state.loop_revision + 1
-            state.had_loop_output = false
-            state.output_was_allowed = false
+            device.CancelOutput()
             if clear then
                 state.loops, state.recent, state.bridge_recent = {}, {}, {}
                 state.last_special_hurt_time = nil
                 state.pending_test = nil
             end
-            pcall(function() G.TheInputProxy:StopVibration() end)
         end
         callbacks.playeractivated = function(_, player)
             if state.installed and player == G.ThePlayer then state.player_active = true end
@@ -473,16 +470,16 @@ function Adapter.Install(config, LoadLocalModule)
             if not state.installed then return end
             data = data or {}
             state.server_paused = data.pause or data.autopause or data.gameautopause or false
-            if state.server_paused and OutputMode() ~= "native" then CancelOutput(false) end
+            if state.server_paused and OutputMode() == "compatibility" then CancelWorldOutput(false) end
         end
         callbacks.playerdeactivated = function(_, player)
             if state.installed and player == G.ThePlayer then
                 state.player_active = false
-                CancelOutput(true)
+                CancelWorldOutput(true)
             end
         end
         callbacks.onremove = function()
-            CancelOutput(true)
+            CancelWorldOutput(true)
             state.server_paused = false
             state.player_active = nil
             state.last_controller_id = nil
@@ -520,9 +517,9 @@ function Adapter.Install(config, LoadLocalModule)
                 and state.config[kind .. "_fallback"] == true
         end,
         CanObserve = function()
-            return state.installed and OutputMode() == "compatibility"
-                and state.player_active ~= false and G.ThePlayer ~= nil
-                and ProfileAllowsVibration() and not device.IsPaused() and GetControllerID() ~= nil
+            -- Prediction confirmations compare their capture's generation after
+            -- this check. Synchronize controller changes before they compare it.
+            return G.ThePlayer ~= nil and OutputAllowed() == true
         end,
         ObserveLoop = function(event, emitter, entity, name)
             local effect, profile = state.effects[event], state.profiles[event]
@@ -538,13 +535,13 @@ function Adapter.Install(config, LoadLocalModule)
         end,
         Shutdown = function()
             if not state.installed then return end
+            local mode = OutputMode()
             state.installed = false
-            state.generation, state.loop_revision = state.generation + 1, state.loop_revision + 1
+            device.CancelOutput(mode)
             state.loops = {}
             state.pending_test = nil
             for i = #state.cleanups, 1, -1 do pcall(state.cleanups[i]) end
             state.cleanups = {}
-            pcall(function() G.TheInputProxy:StopVibration() end)
             if state.unhook ~= nil then state.unhook() end
             for _, task in pairs(state.workers) do
                 if task ~= nil and task.Cancel ~= nil then task:Cancel() end
@@ -565,38 +562,35 @@ function Adapter.Install(config, LoadLocalModule)
                 strong = { duration = 0.22, magnitude = 0.85 },
             }
             local test = tests[level]
-            if test == nil or OutputMode() ~= "compatibility" or not ProfileAllowsVibration()
-                or GetControllerID() == nil then
+            local id = test ~= nil and device.GetOutputController(true) or nil
+            if id == nil then
                 return false
             end
             if device.IsPaused() then
-                -- Explicit user calibration, not a queued gameplay event. A
-                -- short expiry prevents a forgotten request after reconnect.
-                state.pending_test = { level = level, expires = Now() + 10 }
+                state.pending_test = {
+                    level = level, expires = Now() + 10, player = G.ThePlayer,
+                    controller_id = id, controller_type = G.TheInputProxy:GetInputDeviceType(id),
+                }
                 return true
             end
-            AddPulse(G.VIBRATION_CAMERA_SHAKE or 0, test.duration, test.magnitude)
-            return true
+            return AddPulse(G.VIBRATION_CAMERA_SHAKE or 0, test.duration, test.magnitude)
         end,
         ApplyConfig = function(values)
             if not state.installed then return end
+            local previous_mode = OutputMode()
             -- A settings change invalidates old envelope tails immediately.
-            state.generation = state.generation + 1
-            state.loop_revision = state.loop_revision + 1
-            pcall(function() G.TheInputProxy:StopVibration() end)
-            state.had_loop_output = false
+            device.CancelOutput(previous_mode)
             state.pending_test = nil
             if type(values) == "table" then
                 for key, value in pairs(values) do
                     state.config[key] = value
                 end
             end
-            if OutputMode() ~= "compatibility" then
+            local mode = OutputMode()
+            if mode ~= previous_mode then state.last_controller_id = nil end
+            if mode ~= "compatibility" then
                 state.recent = {}
                 state.bridge_recent = {}
-                state.generation = state.generation + 1
-                state.had_loop_output = false
-                pcall(function() G.TheInputProxy:StopVibration() end)
             end
             SuppressNative()
         end,
