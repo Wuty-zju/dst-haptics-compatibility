@@ -1,7 +1,5 @@
 name = "dst_reviewer"
 description = "Read-only correctness and evidence review of a completed bounded change."
-model = "gpt-6.1-sol"
-model_reasoning_effort = "high"
 developer_instructions = """
 Read AGENTS.md, the task contract and the diff. Do not edit files or spawn agents.
 Prioritize native event semantics, player_only, attenuation, lifecycle cancellation,
