@@ -2,6 +2,8 @@
 
 Code support means DST recognizes the device type and exposes it through `TheInputProxy`. Physical acceptance additionally requires a real motor test on that route; Lua cannot infer it.
 
+The 1.6.2 review on November 18 replayed pause, Profile OFF and controller ID/type transitions. Two newly captured logs record 14 initializations of the subscribed 1.5.0 item. Physical motor and USB/Bluetooth acceptance for 1.6.2 is still open. [Review and evidence](reports/1.6.2-review.md)
+
 1.6.1 (2026-11-17): lifecycle ownership, GC and current-native regressions pass.
 No new physical or in-game acceptance was performed. The newest available client
 log remains the November 7 session loading 1.5.0; pending routes stay pending.

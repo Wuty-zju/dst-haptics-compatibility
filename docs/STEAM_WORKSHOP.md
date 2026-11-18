@@ -4,15 +4,12 @@ This project targets the Don't Starve Together Workshop (App ID `322330`) as a r
 
 ## Current item / 当前项目
 
-Workshop ID: **3805091756**. A retained 2026-11-07 local client log shows this item
-loading 1.5.0. Public visibility and current page metadata were not verified during
-the 2026-11-15 workspace review. The older release receipt's "not uploaded" statement
-is historical, not the current installation state. See [status](STATUS.md).
+Two local client logs from November 17–18 record the subscribed item **3805091756** loading version 1.5.0. The latest installation evidence is in [project status](STATUS.md).
 
 For further uploads, log into the original author Steam account and select this
 existing item in the official uploader. **Edit/Update it; do not Add a duplicate.**
 
-The GitHub 1.6.1 package is prepared independently of Steam. After verifying its
+The GitHub release package is prepared independently of Steam. After verifying its
 checksum, use **Update Data** on item 3805091756 with the extracted inner mod folder.
 GitHub release automation does not log into Steam or upload Workshop content.
 Updated bilingual listing text is in [WORKSHOP_DESCRIPTION](WORKSHOP_DESCRIPTION.md).

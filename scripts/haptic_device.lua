@@ -34,6 +34,16 @@ function Device.New(state, Util, L)
         return "compatibility"
     end
 
+    local function CancelOutput(mode)
+        state.generation = state.generation + 1
+        state.loop_revision = state.loop_revision + 1
+        state.had_loop_output = false
+        state.output_was_allowed = false
+        if (mode or OutputMode()) == "compatibility" then
+            pcall(function() G.TheInputProxy:StopVibration() end)
+        end
+    end
+
     local CONTROLLER_TYPE_NAMES =
     {
         [1] = "Xbox/XInput",
@@ -77,16 +87,23 @@ function Device.New(state, Util, L)
         return nil
     end
 
+    local function GetOutputController(allow_paused)
+        if OutputMode() ~= "compatibility" then return nil end
+        if state.player_active == false then return nil, "player_inactive" end
+        if not ProfileAllowsVibration() then return nil, "profile_vibration_off" end
+        if not allow_paused and IsPaused() then return nil, "paused" end
+        local id = GetControllerID()
+        if id == nil then return nil, "no_active_controller" end
+        return id
+    end
+
     local function RefreshControllerOutput(id)
         local current_type = G.TheInputProxy:GetInputDeviceType(id)
         if state.last_controller_id == id and state.last_controller_type == current_type then
             return
         end
         if state.last_controller_id ~= nil then
-            state.generation = state.generation + 1
-            state.loop_revision = state.loop_revision + 1
-            state.had_loop_output = false
-            pcall(function() G.TheInputProxy:StopVibration() end)
+            CancelOutput()
         end
         state.last_controller_id = id
         state.last_controller_type = current_type
@@ -106,22 +123,16 @@ function Device.New(state, Util, L)
     end
 
     local function OutputAllowed()
-        local allowed = OutputMode() == "compatibility" and state.player_active ~= false
-            and ProfileAllowsVibration() and not IsPaused()
-        local id = allowed and GetControllerID() or nil
-        if not id then
+        local id, reason = GetOutputController()
+        if id == nil then
             if state.output_was_allowed then
-                state.generation = state.generation + 1
-                state.loop_revision = state.loop_revision + 1
-                state.had_loop_output = false
-                pcall(function() G.TheInputProxy:StopVibration() end)
+                CancelOutput()
             end
-            state.output_was_allowed = false
             state.last_controller_id = nil
-            return false
+            return false, reason
         end
-        state.output_was_allowed = true
         RefreshControllerOutput(id)
+        state.output_was_allowed = true
         return true
     end
 
@@ -136,7 +147,6 @@ function Device.New(state, Util, L)
             end
         elseif state.native_suppressed then
             state.native_suppressed = false
-            pcall(function() G.TheInputProxy:StopVibration() end)
             if G.TheHaptics ~= nil and G.TheHaptics.EnableVibration ~= nil then
                 pcall(function() G.TheHaptics:EnableVibration(ProfileAllowsVibration()) end)
             end
@@ -205,8 +215,8 @@ function Device.New(state, Util, L)
 
     return {
         ProfileAllowsVibration = ProfileAllowsVibration, IsPaused = IsPaused,
-        OutputMode = OutputMode, GetControllerID = GetControllerID,
-        RefreshControllerOutput = RefreshControllerOutput, OutputAllowed = OutputAllowed,
+        OutputMode = OutputMode, GetOutputController = GetOutputController,
+        CancelOutput = CancelOutput, OutputAllowed = OutputAllowed,
         SuppressNative = SuppressNative, GetOutputCalibration = GetOutputCalibration,
         CalibratePulse = CalibratePulse, MapIntensity = MapIntensity, ChannelFor = ChannelFor,
     }

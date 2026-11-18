@@ -50,12 +50,19 @@ python tools/analyze_waveform_envelopes.py --wav-root "<DST>/data/haptics/vibrat
 审计匹配注释外的完整Lua字符串并保留起始行号。当前404个唯一event有静态引用、99个没有；
 历史406/97含较长音效名的前缀误匹配，407/96还含已注释Charlie death。字面引用与文件名相似度都不能证明实际客户端触发
 或精确event→WAV bank映射。
-原有 `build_haptics_report.py` 的机制说明模板包含历史实现描述，不能未经逐项复审
-就把它输出为新版本的完整保真结论。新数据先生成带 hash/build 的快照摘要。
+从本版运行时生成逐事件表时，用上一步所得的 audit.json 和同一原版脚本目录。该命令在新目录写入 CSV 和摘要，在两种输入不匹配时终止。
+
+```powershell
+python tools/build_haptics_report.py --scripts $scripts --audit .local/evidence/new-audit/audit/audit.json --out .local/evidence/new-audit/report
+```
+
+工具使用 Lua 5.1。可显式传入 `--lua` 或 Windows 的 `--lua-deps`。表中列出原版字段、静态引用位置、严格与可选路径，以及运行时产生的延迟、时长和相对幅度。
 
 1.6.1补充世界/玩家/光束/暂停屏幕的同VM重装、旧owner迟到清理、移除对象GC、
 完整字符串匹配及静音/空输入回归。审计输出目录和包络输出文件必须为新路径；
 已有输出明确拒绝覆盖，零解析定义或无可读WAV明确失败。18项Python回归通过。
+
+1.6.2 回放了原生模式交接、暂停校准取消、同设备编号换类型、同帧多路雨声更新、洞穴降雨和立即静音。实测输入和修复前后数值见[审查报告](reports/1.6.2-review.md)。
 
 ## Physical acceptance / 物理验收
 

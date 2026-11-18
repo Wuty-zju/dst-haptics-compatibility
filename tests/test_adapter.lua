@@ -4,6 +4,7 @@ local now = 0
 local paused = false
 local profile_enabled = true
 local controller_enabled = true
+local controller_id = 1
 local controller_type = 1
 local vibrations = {}
 local removes = {}
@@ -47,15 +48,15 @@ Profile = { GetVibrationEnabled = function() return profile_enabled end }
 TheInput =
 {
     ControllerAttached = function() return controller_enabled end,
-    GetControllerID = function() return controller_enabled and 1 or 0 end,
+    GetControllerID = function() return controller_enabled and controller_id or 0 end,
 }
 TheInputProxy =
 {
-    IsInputDeviceConnected = function(_, id) return controller_enabled and id == 1 end,
-    IsInputDeviceEnabled = function(_, id) return controller_enabled and id == 1 end,
-    GetInputDeviceCount = function() return 2 end,
-    GetInputDeviceType = function(_, id) return id == 1 and controller_type or 0 end,
-    GetInputDeviceName = function(_, id) return id == 1 and "Test Xbox Controller" or "Keyboard" end,
+    IsInputDeviceConnected = function(_, id) return controller_enabled and id == controller_id end,
+    IsInputDeviceEnabled = function(_, id) return controller_enabled and id == controller_id end,
+    GetInputDeviceCount = function() return 3 end,
+    GetInputDeviceType = function(_, id) return id == controller_id and controller_type or 0 end,
+    GetInputDeviceName = function(_, id) return id == controller_id and "Test controller" or "Keyboard" end,
     EnableVibration = function() end,
     AddVibration = function(_, channel, duration, magnitude, looped)
         table.insert(vibrations, { channel = channel, duration = duration, magnitude = magnitude, looped = looped })
@@ -370,7 +371,9 @@ before = #vibrations
 TickOutputs()
 assert(#vibrations == before, "zero loop parameter still produced vibration")
 SoundEmitter.SetParameter(crab_emitter, "crabmagic", "intensity", 1)
-assert(#vibrations == before + 1, "live loop parameter did not restore vibration immediately")
+assert(#vibrations == before, "positive loop gain restarted the mix before its sample")
+TickOutputs()
+assert(#vibrations == before + 1, "live loop parameter did not restore vibration on its next sample")
 TickOutputs()
 assert(#vibrations == before + 2, "live loop parameter did not persist")
 SoundEmitter.KillSound(crab_emitter, "crabmagic")
@@ -622,6 +625,8 @@ before = #vibrations
 TickOutputs()
 assert(#vibrations == before, "zero precipitation produced rumble")
 SoundEmitter.SetParameter(rain, "rain", "intensity", 1)
+assert(#vibrations == before, "rain parameter bypassed the loop sampler")
+TickOutputs()
 assert(#vibrations > before, "world-attached rain was incorrectly distance-filtered")
 SoundEmitter.KillAllSounds(rain)
 assert(next(api.GetState().loops) == nil)
@@ -716,5 +721,99 @@ live_world:PushEvent("onremove")
 assert(live_world:CallbackCount() == 0, "removed world retained adapter callbacks")
 assert(rebound_api.GetState().listener_position == nil, "world unload retained the old listener position")
 rebound_api.Shutdown()
+
+-- The shared proxy must be stopped before restoring Native. Native and OFF
+-- should have no subsequent motor calls through the adapter, including reload.
+local trace = {}
+TheInputProxy.StopVibration = function() trace[#trace + 1] = "stop" end
+TheInputProxy.EnableVibration = function() trace[#trace + 1] = "proxy-enable" end
+TheHaptics.EnableVibration = function(_, enabled) trace[#trace + 1] = "native:" .. tostring(enabled) end
+local function CheckNativeOwnership(values, mode, preference)
+    local ownership_world = LiveWorld()
+    TheWorld = ownership_world
+    local owner = Adapter.Install({ language = "en" }, LoadLocalModule)
+    assert(owner.TestPulse("weak"))
+    trace = {}
+    profile_enabled = preference
+    owner.ApplyConfig(values)
+    assert(table.concat(trace, ",") == "stop,native:" .. tostring(preference),
+        mode .. " did not stop once before restoring the Profile preference")
+    trace = {}
+    TickOutputs()
+    owner.ApplyConfig({ language = "zh" })
+    assert(Adapter.Install(values, LoadLocalModule) == owner)
+    ownership_world:PushEvent("serverpauseddirty", { pause = true })
+    ownership_world:PushEvent("playerdeactivated", player)
+    ownership_world:PushEvent("onremove")
+    owner.Shutdown()
+    assert(#trace == 0, mode .. " changed shared controller output after restoring Native")
+    profile_enabled = true
+end
+CheckNativeOwnership({ language = "en", output_mode = "native" }, "Native", true)
+CheckNativeOwnership({ language = "en", output_mode = "diagnostic", compatibility = false }, "OFF", false)
+
+TheWorld = LiveWorld()
+local output_api = Adapter.Install({ language = "en", output_mode = "diagnostic" }, LoadLocalModule)
+assert(trace[#trace] == "native:false", "Diagnostic did not suppress Native")
+trace = {}
+before = #vibrations
+assert(output_api.Emit("test/player", player))
+assert(not output_api.TestPulse("weak"))
+TheWorld:PushEvent("serverpauseddirty", { pause = true })
+TheWorld:PushEvent("playerdeactivated", player)
+TickOutputs()
+assert(#vibrations == before and #trace == 0, "Diagnostic wrote to the Legacy Rumble proxy")
+TheWorld:PushEvent("serverpauseddirty", { pause = false })
+TheWorld:PushEvent("playeractivated", player)
+output_api.ApplyConfig({ output_mode = "compatibility" })
+
+local function QueueCalibration()
+    TheWorld:PushEvent("serverpauseddirty", { pause = true })
+    assert(output_api.TestPulse("weak"))
+    return #vibrations
+end
+local function ResumeCalibration()
+    TheWorld:PushEvent("serverpauseddirty", { pause = false })
+    TickOutputs()
+end
+local function AssertCalibrationCancelled(label, change, restore)
+    local count = QueueCalibration()
+    change()
+    TickOutputs()
+    restore()
+    ResumeCalibration()
+    assert(#vibrations == count, label .. " replayed a paused calibration request")
+end
+AssertCalibrationCancelled("Disconnect", function() controller_enabled = false end, function() controller_enabled = true end)
+AssertCalibrationCancelled("Profile OFF", function() profile_enabled = false end, function() profile_enabled = true end)
+AssertCalibrationCancelled("Controller index change", function() controller_id = 2 end, function() end)
+AssertCalibrationCancelled("Controller type change", function() controller_type = 2 end, function() end)
+AssertCalibrationCancelled("Local player change", function() ThePlayer = other_player end, function() ThePlayer = player end)
+before = QueueCalibration()
+TheWorld:PushEvent("playerdeactivated", player)
+assert(not output_api.TestPulse("weak"), "deactivated player could request calibration")
+TheWorld:PushEvent("playeractivated", player)
+ResumeCalibration()
+assert(#vibrations == before, "player deactivation replayed a paused calibration request")
+
+-- The action bridge calls CanObserve before comparing its capture's generation.
+-- A changed controller must be visible to it without waiting for the next tick.
+assert(output_api.CanObserve())
+local captured_generation = output_api.GetGeneration()
+controller_type = 7
+assert(output_api.CanObserve() and output_api.GetGeneration() ~= captured_generation,
+    "bridge could acknowledge an old prediction after an unsampled controller change")
+
+now = now + 1
+TheWorld:PushEvent("serverpauseddirty", { pause = true })
+before = #vibrations
+trace = {}
+controller_type = 11
+assert(not output_api.Emit("test/player", player, { source = "sound" }))
+assert(#trace == 0, "paused one-shot took ownership of the controller")
+TheWorld:PushEvent("serverpauseddirty", { pause = false })
+assert(output_api.Emit("test/player", player, { source = "sound" }))
+assert(#vibrations == before + 1, "paused one-shot deduplicated a valid event on immediate resume")
+output_api.Shutdown()
 
 print("adapter behavior tests passed")
