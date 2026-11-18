@@ -25,6 +25,8 @@ assert(Scale("hookline_2/creatures/boss/crabking/magic_LP", { intensity = 0 }) =
 assert(Scale("hookline_2/creatures/boss/crabking/magic_LP", { intensity = 1 }) == 1)
 assert(Scale("rifts5/lunar_boss/supernova_burst_LP", { blocked = 0.05 })
     > Scale("rifts5/lunar_boss/supernova_burst_LP", { blocked = 0.35 }))
+assert(Scale("dontstarve/AMB/caves/rain", { intensity = 0.2 }) == 0.2)
+assert(Scale("dontstarve/AMB/caves/rain", { intensity = 0.8 }) == 0.8)
 assert(Scale("dontstarve/characters/wormwood/fertalize_LP", { start = 0.5 }) == 1)
 assert(Scale("future/event", { intensity = 0 }) == 1, "unknown parameters must remain neutral")
 
