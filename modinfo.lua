@@ -7,7 +7,7 @@ Compatibility rumble for Windows controllers using the current haptics.lua, real
 author = "wuty"
 icon_atlas = "modicon.xml"
 icon = "modicon.tex"
-version = "1.6.1"
+version = "1.6.2"
 api_version = 10
 dst_compatible = true
 dont_starve_compatible = false

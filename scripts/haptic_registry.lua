@@ -10,9 +10,8 @@ function Registry.Populate(state, native_effects, Profiles)
             if state.effects[effect.event] ~= nil then
                 state.duplicate_events = state.duplicate_events + 1
             end
-            -- RegisterEffect is called in file order by the game. A keyed native
-            -- registry consequently resolves duplicate event names to the final
-            -- definition; mirroring that also avoids accidental double rumble.
+            -- Lua registers every row in file order. The native duplicate policy
+            -- is opaque. The adapter uses the last record for one output per name.
             state.effects[effect.event] = effect
         end
     end

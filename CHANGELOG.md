@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## 1.6.2 — 2026-11-18
+
+- 切回原生模式时只清理一次兼容震动。暂停期间的校准绑定当前玩家和手柄，观察到断连、换手柄或原版震动关闭时取消。
+- 具名循环在同一次采样中应用最新非零增益。正在输出的声音静音或结束时立即撤销其贡献。洞穴雨量现在参与同一套增益计算。
+- 全量事件审查从实际 Lua 包络取数，逐项更新原版与实现对照。维护子任务在派工时从宿主的可用模型中选取最新 Astra 或 Sol。
+- Native handoff, controller changes and paused calibration now respect output ownership. Weather loops apply the latest gain on their existing sample. Active mute and stop remain immediate.
+
 ## 1.6.1 — 2026-11-17
 
 - 隔离失活适配器的 Shutdown/ApplyConfig，精确解绑世界监听；重装绑定已有世界，退出清除旧监听坐标。

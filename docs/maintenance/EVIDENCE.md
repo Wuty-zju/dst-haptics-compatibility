@@ -1,6 +1,6 @@
 # 证据索引 / Evidence register
 
-复核日期：2026-11-17。历史维护起点：Mod `v1.5.0` / `cd4f1a2`；本次起点v1.6.0/main-fef26ea。
+复核于 2026-11-18。维护起点为 1.5.0，本轮基线为 1.6.1 发布后的 main `5b8c3b5`。
 本索引记录结论的来源和边界，不把聊天或报告中的断言自动升级成复测证据。
 
 | ID | 结论 | 证据类别与日期 | 材料 / 局限 |
@@ -24,6 +24,11 @@
 | E17 | 同VM旧API、实体引用/观察和暂停屏幕缺陷已复现并修复 | 四条独立PR、回归和集成验证 | 17 PASS、18项Python；没有新1.6.x实机日志或马达验收 |
 | E18 | 两份旧候选构建归档后内容不变 | 11月17日45文件大小和SHA-256复验 | archive/2026-11-17/manifest.json；outputs和原始证据保持原位 |
 | E19 | 1.6.1正式发布，线上3附件重新下载并匹配digest/tag | 11月17日Release API、CI、下载及逐Lua Git blob比较 | [发布凭证](../reports/1.6.1-release-receipt.md)；未安装本地Mod、未更新Workshop、未新做马达验收 |
+| E20 | 本机原版与留存快照的 4,109 个文件逐项同名同字节，Steam 确认 build26474873 为最新 | 本日实读 ZIP、两个 hash 与官方 UpToDateCheck | installed-source.json；[本版审查](../reports/1.6.2-review.md) |
+| E21 | 两份新客户端日志共 14 次加载及初始化 1.5.0。第三份与旧样本字节相同 | 本机原件、工坊 modinfo、原行号和 SHA-256 | log-evidence.json；无本版物理马达记录 |
+| E22 | 切回原生发送多余 Stop、暂停校准跨设备、天气同帧重复重混以及洞穴雨固定增益 | Lua 5.1 修复前后回放，原生组件及状态图行号 | [四项独立复审](../reports/1.6.2-review.md)；调用次数和幅度属于代理测量 |
+| E23 | 当前原版 503 行全量表来自实际 Lua 包络与同一份原版输入，统计 30 个循环和 104 个 RMS 包络族事件 | 本机当前原版事件与运行时逐行核对 | [字段与统计](../audit/DST-Haptics-Audit-Summary-1.6.2.md)；[完整 CSV](../audit/DST-Haptics-Event-Audit-1.6.2.csv) |
+| E24 | 上版候选 26 个文件按清单归档。本机复核三个日期清单共 4,434 项与先前两个正式 ZIP 的 checksum | workspace-inventory.json，逐项 SHA-256 | 新归档清单在 archive/2026-11-18/manifest.json |
 
 ## 输入和成品哈希
 
@@ -38,7 +43,9 @@
 
 ## 本地原始材料
 
-当前采集：`.local/evidence/2026-11-15-baseline/`，包含 snapshot.json、client_log.txt、
+11 月 18 日复核位于 `.local/evidence/2026-11-18-review/`，其中记录已逐文件核对的原版路径、安全归档的日志和新的回归结果。
+
+早期采集：`.local/evidence/2026-11-15-baseline/`，包含 snapshot.json、client_log.txt、
 github-release.json、native-delta.json、native/scripts/ 和 audit/。这些材料忽略不提交。
 测试的 JSON 与实际命令单独保留，路径见工作区报告。
 

@@ -78,6 +78,8 @@ pwsh -File tools/build_release.ps1 -OutputRoot build/new-candidate-session
 archive/2026-11-17/manifest.json。outputs/1.6.0、全部原始证据及历史工作树未移动；本版开发使用
 独立161工作树，候选包使用新build路径。
 
+2026-11-18 将上版候选的 26 个文件从 `build/candidate-1.6.1-final/` 转存至 `archive/2026-11-18/build/`。迁移前后大小与 SHA-256 一致。三份归档清单声明的 4,434 个文件已全部复验。1.6.0、1.6.1 的正式 ZIP 保留于各自的 outputs 子目录。历史工作树保持原路径，现行审阅使用同级的 162 工作树。新旧日志和快照通过[本轮任务](../tasks/2026-11-18-release-1.6.2.md)和[证据索引](EVIDENCE.md)查找。
+
 恢复某项时按 manifest 对照，先核对 hash，再复制到新目录；不要覆盖当前分支源码。
 归档中的旧 clone 不再作为工作区。`outputs/` 内的最终发布收据已另存成可跟踪的
 [历史发布凭证](../reports/1.5.0-release-receipt.md)。

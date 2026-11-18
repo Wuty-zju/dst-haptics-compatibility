@@ -1,4 +1,4 @@
-# Workshop listing / 创意工坊文案 — 1.6.1
+# Workshop listing / 创意工坊文案 — 1.6.2
 
 Existing item: https://steamcommunity.com/sharedfiles/filedetails/?id=3805091756
 
@@ -39,8 +39,8 @@ Core envelopes, spatial falloff and controller curves are approximations. Some s
 
 [url=https://github.com/Wuty-zju/dst-haptics-compatibility]Source, documentation and issues[/url]
 
-## 1.6.1 Change note
+## 1.6.2 Change note
 
-维护现有行为：修复失活API干扰、世界/玩家观察资源清理、存活光束和暂停屏幕重装，纠正静态审计和证据覆盖。保留全部设置、严格默认、包络和设备曲线；未增加功能。实机验收仍待完成。
+切回原生模式后交还震动控制权。换手柄或关闭原版震动时会取消等待中的校准。地面和洞穴雨声按原版雨量更新，持续声静音或停止时及时清理。
 
-Maintains existing behavior: fixes inactive API ownership, entity resource cleanup and surviving world/beam/pause-screen rebinding; corrects static evidence and protects prior reports. Settings, strict defaults, envelopes and device curves are retained. No new features or physical acceptance claims.
+Returns control to native vibration after a mode change. Pending calibration is cancelled when the controller changes or vibration is disabled. Surface and cave rain follow native precipitation updates. Muting or stopping an active loop removes its contribution immediately.
