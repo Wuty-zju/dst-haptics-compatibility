@@ -141,7 +141,7 @@ assert(#magnitudes == 5, "delayed segment leaked across controller generations")
 -- A weak torch contribution can remain queued behind a shorter lunar hail pulse.
 local hail_effect = { event = "rifts3/lunarhail/lunar_rainAMB", vibration_intensity = 1 }
 local lighter_effect = { event = "dontstarve/wilson/lighter_LP", vibration_intensity = 1 }
-local function CheckLighterRemoval(survivor_duration, expected_pulses)
+local function CheckLighterRemoval(survivor_duration, expected_pulses, replace)
     state.loops = {}
     queued = {}
     local torch, nearby_torch = Emitter(), Emitter()
@@ -160,6 +160,9 @@ local function CheckLighterRemoval(survivor_duration, expected_pulses)
     assert(#magnitudes == before + 1 and magnitudes[#magnitudes] == 0.8
         and durations[#durations] == 0.05 and #queued == 1, "test did not build the expected hail and lighter mix")
     lighter_fx.valid = false
+    if replace then
+        loops.Register(lighter_effect, torch, { IsValid = function() return true end }, "torch", 0.2, profile)
+    end
     local previous_removes = removes
     queued[1]()
     assert(#magnitudes == before + 1 + expected_pulses, "delayed mix did not respect the remaining live contributions")
@@ -171,4 +174,5 @@ end
 CheckLighterRemoval(nil, 0)
 CheckLighterRemoval(0.08, 0) -- Same gain, but the survivor ends before this segment.
 CheckLighterRemoval(0.10, 1)
+CheckLighterRemoval(nil, 0, true) -- A replacement owns the name, but has not been sampled.
 print("loop mixer tests passed: sampled gain, immediate stops, and supported delayed segments")

@@ -48,8 +48,8 @@ function Loops.New(state, d)
         for i = 1, #contributions do
             local pulse = contributions[i]
             if pulse.magnitude == segment.magnitude and pulse.duration - segment.delay >= segment.duration then
-                local loop = state.loops[pulse.key]
-                if loop ~= nil and IsEntityValid(loop.entity) and IsPlaying(loop) then return true end
+                local loop = pulse.loop
+                if state.loops[pulse.key] == loop and IsEntityValid(loop.entity) and IsPlaying(loop) then return true end
             end
         end
         return false
@@ -82,7 +82,9 @@ function Loops.New(state, d)
                         * EffectScale(loop.effect, loop.profile, "_duration")
                     if magnitude > 0 and duration_scale > 0 then
                         local duration, calibrated = CalibratePulse(loop.profile.duration, magnitude, duration_scale)
-                        contributions[#contributions + 1] = { duration = duration, magnitude = calibrated, key = key }
+                        contributions[#contributions + 1] = {
+                            duration = duration, magnitude = calibrated, key = key, loop = loop,
+                        }
                         loop.mixed_revision = revision
                     end
                 elseif not remix then
