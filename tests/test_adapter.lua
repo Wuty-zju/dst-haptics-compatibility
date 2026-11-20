@@ -631,9 +631,111 @@ assert(#vibrations > before, "world-attached rain was incorrectly distance-filte
 SoundEmitter.KillAllSounds(rain)
 assert(next(api.GetState().loops) == nil)
 
+local rain_event, rain_key = "dontstarve/AMB/rain", tostring(rain) .. "|rain"
+do
+    -- The native seamless swap deactivates the old player before changing
+    -- ThePlayer. The weather component keeps the same world sound handle.
+    local shave = "dontstarve/wilson/shave_LP"
+    AddEffect({ event = shave, vibration = true, vibration_intensity = 1, player_only = true, category = "PLAYER" })
+    local removed_entity = { Transform = Transform(0, 0), valid = true, IsValid = function(self) return self.valid end }
+    local removed_emitter = Emitter(removed_entity)
+    SoundEmitter.PlaySound(rain, rain_event, "rain", 1)
+    SoundEmitter.SetParameter(rain, "rain", "intensity", 0.4)
+    SoundEmitter.PlaySound(player_emitter, shave, "shave")
+    SoundEmitter.PlaySound(removed_emitter, "test/loop_LP", "deleted")
+    TickOutputs()
+    local running_rain = api.GetState().loops[rain_key]
+    assert(running_rain ~= nil and rain:PlayingSound("rain"))
+    local stops_before_swap = stop_count
+    player.isseamlessswapsource = true
+    world.playerdeactivated(world, player)
+    assert(stop_count == stops_before_swap + 1 and not api.CanObserve(), "local swap did not immediately cancel output")
+    assert(api.GetState().loops[tostring(player_emitter) .. "|shave"] == nil, "seamless swap retained the previous player's loop")
+    removed_entity.valid = false
+    before = #vibrations
+    TickOutputs()
+    assert(#vibrations == before and api.GetState().loops[tostring(removed_emitter) .. "|deleted"] == nil,
+        "inactive player caused vibration or retained a removed entity")
+    player.isseamlessswapsource = nil
+    ThePlayer = other_player
+    world.playeractivated(world, other_player)
+    SoundEmitter.SetParameter(rain, "rain", "intensity", 0.6)
+    TickOutputs()
+    assert(#vibrations == before + 1 and api.GetState().loops[rain_key] == running_rain,
+        "live world rain was lost after a seamless player swap")
+    SoundEmitter.KillSound(rain, "rain")
+    assert(next(api.GetState().loops) == nil)
+    ThePlayer = player
+    world.playeractivated(world, player)
+end
+
+do
+    local probes, enables = 0, 0
+    local engine_playing = rain.PlayingSound
+    local proxy_enable = TheInputProxy.EnableVibration
+    rain.PlayingSound = function(emitter, name)
+        probes = probes + 1
+        return engine_playing(emitter, name)
+    end
+    TheInputProxy.EnableVibration = function(...)
+        enables = enables + 1
+        return proxy_enable(...)
+    end
+    for _, mode in ipairs({ "native", "diagnostic", "profile_off" }) do
+        if mode == "profile_off" then
+            profile_enabled = false
+            TickOutputs() -- Cancel the previous compatibility ownership.
+        else
+            api.ApplyConfig({ output_mode = mode })
+        end
+        local prior_probes, prior_removes, prior_stops = probes, #removes, stop_count
+        local prior_delays, prior_enables = #delayed, enables
+        before = #vibrations
+        SoundEmitter.PlaySound(rain, rain_event)
+        SoundEmitter.PlaySound(rain, rain_event, "killed", 1)
+        SoundEmitter.KillSound(rain, "killed")
+        SoundEmitter.PlaySound(rain, rain_event, "replaced", 1)
+        SoundEmitter.PlaySound(rain, "ordinary/unmatched/replacement", "replaced", 1)
+        SoundEmitter.PlaySound(rain, rain_event, "ended", 1)
+        rain.playing.ended = false
+        SoundEmitter.PlaySound(rain, rain_event, "rain", 0.75)
+        SoundEmitter.SetParameter(rain, "rain", "intensity", 0.4)
+        TickOutputs()
+        assert(#vibrations == before and #removes == prior_removes and stop_count == prior_stops
+            and #delayed == prior_delays and probes == prior_probes and enables == prior_enables,
+            mode .. " probed or touched compatibility output")
+        assert(api.GetState().loops[tostring(rain) .. "|killed"] == nil
+            and api.GetState().loops[tostring(rain) .. "|replaced"] == nil, mode .. " retained a killed or replaced handle")
+        api.ApplyConfig({ output_mode = "compatibility" })
+        profile_enabled = true
+        SoundEmitter.SetParameter(rain, "rain", "intensity", 0.6)
+        TickOutputs()
+        local record = api.GetState().loops[rain_key]
+        assert(#vibrations == before + 1 and record ~= nil and record.volume == 0.75 and record.params.intensity == 0.6,
+            mode .. " lost the live named sound when compatibility output resumed")
+        assert(api.GetState().loops[tostring(rain) .. "|ended"] == nil, mode .. " kept a handle that the engine had ended")
+
+        -- A real stop immediately after pause must remove the record without
+        -- emitting any compatibility calls after the already-completed stop.
+        world.serverpauseddirty(world, { pause = true })
+        prior_stops, prior_removes, prior_probes = stop_count, #removes, probes
+        before = #vibrations
+        SoundEmitter.KillSound(rain, "rain")
+        assert(stop_count == prior_stops and #removes == prior_removes and probes == prior_probes)
+        world.serverpauseddirty(world, { pause = false })
+        TickOutputs()
+        assert(#vibrations == before and next(api.GetState().loops) == nil, "paused kill leaked into resumed output")
+    end
+    rain.PlayingSound = engine_playing
+    TheInputProxy.EnableVibration = proxy_enable
+end
+
+SoundEmitter.PlaySound(rain, rain_event, "rain", 1)
+TickOutputs()
 local stops_before_unload = stop_count
 world.onremove()
 assert(stop_count == stops_before_unload + 1, "world unload did not stop all vibration")
+assert(next(api.GetState().loops) == nil, "world unload retained a live named sound")
 
 
 if os.getenv("DST_HAPTICS_BENCHMARK") == "1" then
@@ -814,6 +916,63 @@ assert(#trace == 0, "paused one-shot took ownership of the controller")
 TheWorld:PushEvent("serverpauseddirty", { pause = false })
 assert(output_api.Emit("test/player", player, { source = "sound" }))
 assert(#vibrations == before + 1, "paused one-shot deduplicated a valid event on immediate resume")
+
+local function CheckFreshEvent(label, transition, from_bridge)
+    now = now + 1
+    local count = #vibrations
+    SoundEmitter.PlaySound(player_emitter, "test/player")
+    assert(#vibrations == count + 1)
+    local generation = output_api.GetGeneration()
+    now = now + 0.033
+    transition()
+    if from_bridge then
+        output_api.Emit("test/player", player, { source = "server_confirmed_work", semantic_key = label })
+    else
+        SoundEmitter.PlaySound(player_emitter, "test/player")
+    end
+    assert(output_api.GetGeneration() ~= generation, label .. " did not invalidate output")
+    assert(#vibrations == count + 2, label .. " deduplicated an event against cancelled output")
+end
+CheckFreshEvent("Controller index change", function() controller_id = 1 end)
+CheckFreshEvent("Controller type change", function() controller_type = 2 end, true)
+CheckFreshEvent("Server pause/resume", function()
+    TheWorld:PushEvent("serverpauseddirty", { pause = true })
+    TheWorld:PushEvent("serverpauseddirty", { pause = false })
+end)
+CheckFreshEvent("Sampled Profile OFF", function()
+    profile_enabled = false
+    TickOutputs()
+    profile_enabled = true
+end)
+CheckFreshEvent("Compatibility settings", function() output_api.ApplyConfig({ strength = 0.9 }) end)
+CheckFreshEvent("Native round trip", function()
+    output_api.ApplyConfig({ output_mode = "native" })
+    output_api.ApplyConfig({ output_mode = "compatibility" })
+end)
+
+now = now + 1
+SoundEmitter.PlaySound(focal_emitter, "dontstarve/wilson/burned")
+now = now + 0.05
+assert(output_api.HasRecentSpecialHurt(), "current special hurt lost priority")
+controller_type = 7
+assert(output_api.CanObserve())
+assert(not output_api.HasRecentSpecialHurt(), "cancelled special hurt suppressed a new controller's feedback")
+
+-- A same-source retry must not extend the cross-route window.
+now = now + 1
+local first_sound = now
+before = #vibrations
+SoundEmitter.PlaySound(player_emitter, "test/player")
+now = first_sound + 0.02
+assert(not output_api.Emit("test/player", player, { source = "server_confirmed_work", semantic_key = "paired" }),
+    "valid cross-route dedupe was lost")
+now = first_sound + 0.035
+SoundEmitter.PlaySound(player_emitter, "test/player")
+assert(#vibrations == before + 1, "valid same-source dedupe was lost")
+now = first_sound + 0.1
+assert(output_api.Emit("test/player", player, { source = "server_confirmed_work", semantic_key = "distinct" }),
+    "rejected sound replay extended cross-route dedupe")
+assert(#vibrations == before + 2)
 output_api.Shutdown()
 
 print("adapter behavior tests passed")

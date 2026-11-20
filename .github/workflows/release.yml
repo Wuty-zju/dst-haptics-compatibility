@@ -5,7 +5,7 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   checks:
@@ -16,20 +16,17 @@ jobs:
   release:
     needs: checks
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Verify tag matches mod version
+      - name: Build release from matching version tag
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
-          if ((Get-Content modinfo.lua -Raw) -notmatch ('version\s*=\s*"' + [regex]::Escape($version) + '"')) {
-            throw "Tag and modinfo.lua version differ"
+          if ($env:GITHUB_REF_NAME -cnotmatch '^v([0-9]+\.[0-9]+\.[0-9]+)$') {
+            throw 'Expected a vMAJOR.MINOR.PATCH tag'
           }
-      - name: Build release
-        shell: pwsh
-        run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
-          ./tools/build_release.ps1 -Version $version
+          ./tools/build_release.ps1 -Version $Matches[1]
       - uses: softprops/action-gh-release@v2
         with:
           name: DST Haptics Compatibility ${{ github.ref_name }}

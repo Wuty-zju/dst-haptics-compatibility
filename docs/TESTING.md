@@ -64,6 +64,8 @@ python tools/build_haptics_report.py --scripts $scripts --audit .local/evidence/
 
 1.6.2 回放了原生模式交接、暂停校准取消、同设备编号换类型、同帧多路雨声更新、洞穴降雨和立即静音。实测输入和修复前后数值见[审查报告](reports/1.6.2-review.md)。
 
+1.6.3 增加同世界无缝换角、从原生或诊断模式恢复持续声、换手柄及暂停跨代次去重的回放。Windows CI 用未跟踪 Lua 验证 ZIP 排除规则，改变源文件的时间和文本换行后重建并比较 ZIP、校验文件与预览图。[本版审查](reports/1.6.3-review.md)
+
 ## Physical acceptance / 物理验收
 
 连续工具节奏、挥动/命中、当地受击、Boss近/远、UI、具名loop、退出世界、暂停、

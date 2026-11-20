@@ -65,6 +65,8 @@ pwsh -File tools/snapshot_game.ps1 -GameRoot "<DST 安装目录>" -ClientLog "<c
 pwsh -File tools/build_release.ps1 -OutputRoot build/new-candidate-session
 ```
 
+构建从当前 Git 索引选取运行时 Lua，打包工作树中的文件内容。正式发版使用干净的标签检出。ZIP 使用固定条目时间和顺序，同一构建环境可以复验产物哈希。源码归档也可从其平铺的 scripts 目录构建。
+
 输出目录必须新鲜。若 stage、ZIP、checksum 或 preview 已存在，构建工具停止，
 不再先删除旧 stage/ZIP。正式版本仍从 `modinfo.lua` 读取；维护提交不擅自升版。
 
@@ -79,6 +81,8 @@ archive/2026-11-17/manifest.json。outputs/1.6.0、全部原始证据及历史�
 独立161工作树，候选包使用新build路径。
 
 2026-11-18 将上版候选的 26 个文件从 `build/candidate-1.6.1-final/` 转存至 `archive/2026-11-18/build/`。迁移前后大小与 SHA-256 一致。三份归档清单声明的 4,434 个文件已全部复验。1.6.0、1.6.1 的正式 ZIP 保留于各自的 outputs 子目录。历史工作树保持原路径，现行审阅使用同级的 162 工作树。新旧日志和快照通过[本轮任务](../tasks/2026-11-18-release-1.6.2.md)和[证据索引](EVIDENCE.md)查找。
+
+2026-11-21 把上版 1.6.2 候选的 26 个文件归档到 `archive/2026-11-21/build/`，逐文件核对迁移前后的大小及 SHA-256。原有正式版、原版数据和日志的路径保留。[本轮任务](../tasks/2026-11-21-release-1.6.3.md)
 
 恢复某项时按 manifest 对照，先核对 hash，再复制到新目录；不要覆盖当前分支源码。
 归档中的旧 clone 不再作为工作区。`outputs/` 内的最终发布收据已另存成可跟踪的

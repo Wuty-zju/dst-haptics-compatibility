@@ -271,6 +271,7 @@ function Adapter.Install(config, LoadLocalModule)
             DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, reason, source)
             return false
         end
+        if profile.loop then return false end
         local now = Now()
         -- Sound hooks and replicated-action bridges can observe the same native
         -- event through different Lua paths. Keep this key deliberately small:
@@ -283,7 +284,6 @@ function Adapter.Install(config, LoadLocalModule)
             DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, profile.total, ChannelFor(effect, profile), true, "cross_path_duplicate", source)
             return false
         end
-        state.bridge_recent[cross_key] = { time = now, source = source }
         local key = dedupe_key or (event .. "|" .. EntityKey(entity) .. "|" .. tostring(name or "oneshot")
             .. "|" .. tostring(NumberOr(volume, 1)))
         local last = state.recent[key]
@@ -292,22 +292,19 @@ function Adapter.Install(config, LoadLocalModule)
             return false
         end
         state.recent[key] = now
+        state.bridge_recent[cross_key] = { time = now, source = source }
 
-        if profile.loop then
-            return false
-        else
-            local lower_event = string.lower(event)
-            if source == "sound" and (entity == G.ThePlayer or local_context)
-                and event ~= "dontstarve/wilson/hit"
-                and (string.find(lower_event, "shocked", 1, true) ~= nil
-                    or string.find(lower_event, "/freeze_", 1, true) ~= nil
-                    or string.find(lower_event, "hud_hot_level", 1, true) ~= nil
-                    or string.find(lower_event, "burned", 1, true) ~= nil
-                    or string.find(lower_event, "charlie/attack", 1, true) ~= nil) then
-                state.last_special_hurt_time = now
-            end
-            ScheduleProfile(effect, entity, profile, volume, spatial, distance, source, params)
+        local lower_event = string.lower(event)
+        if source == "sound" and (entity == G.ThePlayer or local_context)
+            and event ~= "dontstarve/wilson/hit"
+            and (string.find(lower_event, "shocked", 1, true) ~= nil
+                or string.find(lower_event, "/freeze_", 1, true) ~= nil
+                or string.find(lower_event, "hud_hot_level", 1, true) ~= nil
+                or string.find(lower_event, "burned", 1, true) ~= nil
+                or string.find(lower_event, "charlie/attack", 1, true) ~= nil) then
+            state.last_special_hurt_time = now
         end
+        ScheduleProfile(effect, entity, profile, volume, spatial, distance, source, params)
         return true
     end
 
@@ -328,16 +325,17 @@ function Adapter.Install(config, LoadLocalModule)
         local profile = state.profiles[event]
         if profile.loop then
             local mode = OutputMode()
-            if mode == "native" then
-                return
-            elseif mode == "diagnostic" then
+            if mode == "diagnostic" then
                 HandleEvent(event, entity, name, volume, "sound", nil, local_context, params)
-                return
             end
-            -- Keep a real named sound's lifecycle even while distant, paused
-            -- or disconnected. Eligibility is re-evaluated at every sample.
-            local _, distance = SpatialFactor(effect, entity, local_context)
-            RegisterLoop(effect, emitter, entity, name, volume, profile, distance, "sound", local_context, params)
+            -- Native weather sets parameters on a continuing handle without
+            -- replaying it. Keep named starts across output mode changes.
+            if mode == "compatibility" then
+                local _, distance = SpatialFactor(effect, entity, local_context)
+                RegisterLoop(effect, emitter, entity, name, volume, profile, distance, "sound", local_context, params)
+            elseif name ~= nil then
+                RegisterLoop(effect, emitter, entity, name, volume, profile, nil, nil, local_context, params)
+            end
             return
         end
         HandleEvent(event, entity, name, volume, "sound", nil, local_context, params)
@@ -454,12 +452,15 @@ function Adapter.Install(config, LoadLocalModule)
         -- let an inactive owner attach listeners to the next world.
         if not state.installed or world_bindings[inst] ~= nil then return end
         local callbacks = {}
-        local function CancelWorldOutput(clear)
+        local function CancelWorldOutput(clear, swapping_player)
             if not state.installed then return end
             device.CancelOutput()
             if clear then
-                state.loops, state.recent, state.bridge_recent = {}, {}, {}
-                state.last_special_hurt_time = nil
+                if swapping_player ~= nil then
+                    loops.ForgetPlayer(swapping_player)
+                else
+                    state.loops = {}
+                end
                 state.pending_test = nil
             end
         end
@@ -473,9 +474,11 @@ function Adapter.Install(config, LoadLocalModule)
             if state.server_paused and OutputMode() == "compatibility" then CancelWorldOutput(false) end
         end
         callbacks.playerdeactivated = function(_, player)
-            if state.installed and player == G.ThePlayer then
+            if state.installed and player ~= nil and player == G.ThePlayer then
                 state.player_active = false
-                CancelWorldOutput(true)
+                -- The world and its weather emitters survive a seamless swap.
+                -- Native clears this flag after the deactivation event.
+                CancelWorldOutput(true, player.isseamlessswapsource == true and player or nil)
             end
         end
         callbacks.onremove = function()
@@ -586,12 +589,7 @@ function Adapter.Install(config, LoadLocalModule)
                     state.config[key] = value
                 end
             end
-            local mode = OutputMode()
-            if mode ~= previous_mode then state.last_controller_id = nil end
-            if mode ~= "compatibility" then
-                state.recent = {}
-                state.bridge_recent = {}
-            end
+            if OutputMode() ~= previous_mode then state.last_controller_id = nil end
             SuppressNative()
         end,
     }
