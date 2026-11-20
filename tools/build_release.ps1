@@ -58,15 +58,18 @@ foreach ($name in $runtime) {
 }
 Copy-Item -LiteralPath (Join-Path $repo "preview.jpg") -Destination $preview
 
-# Source-relative developer links remain useful in a standalone Workshop ZIP.
-foreach ($readmeName in @('README.md', 'README.en.md')) {
-    $readmePath = Join-Path $stage $readmeName
-    $readmeText = Get-Content -LiteralPath $readmePath -Raw
-    $readmeText = [regex]::Replace($readmeText, '\]\((docs/[^)]+|CONTRIBUTING\.md|CHANGELOG\.md|AGENTS\.md)\)', {
-        param($match)
-        '](' + 'https://github.com/Wuty-zju/dst-haptics-compatibility/blob/v' + $Version + '/' + $match.Groups[1].Value + ')'
-    })
-    [IO.File]::WriteAllText($readmePath, $readmeText, [Text.UTF8Encoding]::new($false))
+# Older checkouts can retain CRLF even after their Git attributes have changed.
+$utf8 = [Text.UTF8Encoding]::new($false)
+foreach ($name in @('README.md', 'README.en.md', 'LICENSE', 'modicon.xml')) {
+    $path = Join-Path $stage $name
+    $content = Get-Content -LiteralPath $path -Raw -Encoding utf8
+    if ($name -like 'README*') {
+        $content = [regex]::Replace($content, '\]\((docs/[^)]+|CONTRIBUTING\.md|CHANGELOG\.md|AGENTS\.md)\)', {
+            param($match)
+            '](' + 'https://github.com/Wuty-zju/dst-haptics-compatibility/blob/v' + $Version + '/' + $match.Groups[1].Value + ')'
+        })
+    }
+    [IO.File]::WriteAllText($path, $content.Replace([string][char]13 + [char]10, [string][char]10), $utf8)
 }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem

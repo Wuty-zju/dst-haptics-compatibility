@@ -69,6 +69,12 @@ jobs:
           if ((Get-Item -LiteralPath (Join-Path $root 'preview.jpg')).Length -ge 1MB) { throw 'Preview is too large' }
           $repeat = 'build/repeated-package'
           (Get-Item -LiteralPath modmain.lua).LastWriteTime = [DateTime]::Now.AddDays(-7)
+          foreach ($name in @('LICENSE', 'modicon.xml')) {
+            $path = (Get-Item -LiteralPath $name).FullName
+            $text = [IO.File]::ReadAllText($path)
+            $text = $text.Replace([string][char]13 + [char]10, [string][char]10)
+            [IO.File]::WriteAllText($path, $text.Replace([string][char]10, [string][char]13 + [char]10))
+          }
           ./tools/build_release.ps1 -OutputRoot $repeat
           foreach ($file in $files) {
             $repeatFile = Join-Path $repeat $file.Name
