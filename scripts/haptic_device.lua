@@ -36,6 +36,9 @@ function Device.New(state, Util, L)
 
     local function CancelOutput(mode)
         state.generation = state.generation + 1
+        -- Duplicate history and special-hurt priority apply to this output generation.
+        state.recent, state.bridge_recent = {}, {}
+        state.last_special_hurt_time = nil
         state.loop_revision = state.loop_revision + 1
         state.had_loop_output = false
         state.output_was_allowed = false

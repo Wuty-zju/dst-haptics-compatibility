@@ -271,6 +271,7 @@ function Adapter.Install(config, LoadLocalModule)
             DebugLog(effect, entity, nil, NumberOr(effect.vibration_intensity, 1), 0, 0, "n/a", true, reason, source)
             return false
         end
+        if profile.loop then return false end
         local now = Now()
         -- Sound hooks and replicated-action bridges can observe the same native
         -- event through different Lua paths. Keep this key deliberately small:
@@ -283,7 +284,6 @@ function Adapter.Install(config, LoadLocalModule)
             DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, profile.total, ChannelFor(effect, profile), true, "cross_path_duplicate", source)
             return false
         end
-        state.bridge_recent[cross_key] = { time = now, source = source }
         local key = dedupe_key or (event .. "|" .. EntityKey(entity) .. "|" .. tostring(name or "oneshot")
             .. "|" .. tostring(NumberOr(volume, 1)))
         local last = state.recent[key]
@@ -292,22 +292,19 @@ function Adapter.Install(config, LoadLocalModule)
             return false
         end
         state.recent[key] = now
+        state.bridge_recent[cross_key] = { time = now, source = source }
 
-        if profile.loop then
-            return false
-        else
-            local lower_event = string.lower(event)
-            if source == "sound" and (entity == G.ThePlayer or local_context)
-                and event ~= "dontstarve/wilson/hit"
-                and (string.find(lower_event, "shocked", 1, true) ~= nil
-                    or string.find(lower_event, "/freeze_", 1, true) ~= nil
-                    or string.find(lower_event, "hud_hot_level", 1, true) ~= nil
-                    or string.find(lower_event, "burned", 1, true) ~= nil
-                    or string.find(lower_event, "charlie/attack", 1, true) ~= nil) then
-                state.last_special_hurt_time = now
-            end
-            ScheduleProfile(effect, entity, profile, volume, spatial, distance, source, params)
+        local lower_event = string.lower(event)
+        if source == "sound" and (entity == G.ThePlayer or local_context)
+            and event ~= "dontstarve/wilson/hit"
+            and (string.find(lower_event, "shocked", 1, true) ~= nil
+                or string.find(lower_event, "/freeze_", 1, true) ~= nil
+                or string.find(lower_event, "hud_hot_level", 1, true) ~= nil
+                or string.find(lower_event, "burned", 1, true) ~= nil
+                or string.find(lower_event, "charlie/attack", 1, true) ~= nil) then
+            state.last_special_hurt_time = now
         end
+        ScheduleProfile(effect, entity, profile, volume, spatial, distance, source, params)
         return true
     end
 
@@ -464,8 +461,6 @@ function Adapter.Install(config, LoadLocalModule)
                 else
                     state.loops = {}
                 end
-                state.recent, state.bridge_recent = {}, {}
-                state.last_special_hurt_time = nil
                 state.pending_test = nil
             end
         end
@@ -594,12 +589,7 @@ function Adapter.Install(config, LoadLocalModule)
                     state.config[key] = value
                 end
             end
-            local mode = OutputMode()
-            if mode ~= previous_mode then state.last_controller_id = nil end
-            if mode ~= "compatibility" then
-                state.recent = {}
-                state.bridge_recent = {}
-            end
+            if OutputMode() ~= previous_mode then state.last_controller_id = nil end
             SuppressNative()
         end,
     }
