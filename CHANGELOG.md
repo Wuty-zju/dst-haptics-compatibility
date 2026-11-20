@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## 1.6.3 — 2026-11-21
+
+- 保留无缝换角色时仍在播放的世界声音。原生和诊断模式下开始的具名声音在切回兼容时重新确认句柄。
+- 暂停、设备切换和设置使旧输出失效时，同步清理去重和受击记录。被同源规则拒绝的重复声音不延长跨来源抑制。
+- 发布构建以 Git 跟踪的运行时脚本为输入，采用固定 ZIP 时间和顺序。重新打包比较全部成员及校验和。
+- Persistent rain survives seamless swaps and mode changes. Old deduplication no longer suppresses events after output resumes. Builds include only tracked runtime inputs from a Git checkout.
+
 ## 1.6.2 — 2026-11-18
 
 - 切回原生模式时只清理一次兼容震动。暂停期间的校准绑定当前玩家和手柄，观察到断连、换手柄或原版震动关闭时取消。

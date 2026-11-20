@@ -12,6 +12,7 @@
 | 当前开发顺序 | [路线图](ROADMAP.md) |
 | 任务登记与交接 | [任务目录](tasks/README.md) · [模板](tasks/TEMPLATE.md) |
 | 原版语义与兼容层设计 | [架构](ARCHITECTURE.md) |
+| 1.6.3 维护、分支核对与稳定打包 | [详细审查](reports/1.6.3-review.md) · [任务合同](tasks/2026-11-21-release-1.6.3.md) |
 | 1.6.2 维护、全量事件与工作区交接 | [详细审查](reports/1.6.2-review.md) · [503 项对照表](audit/DST-Haptics-Event-Audit-1.6.2.csv) · [发布凭证](reports/1.6.2-release-receipt.md) · [任务合同](tasks/2026-11-18-release-1.6.2.md) |
 | 1.6.1维护审查、独立修复与保留理由 | [审查报告](reports/1.6.1-review.md) · [发布凭证](reports/1.6.1-release-receipt.md) · [任务合同](tasks/2026-11-17-release-1.6.1.md) |
 | 1.6新增14事件、受击/循环真实路径 | [触发审计](audit/1.6.0-trigger-paths.md) · [1.6审核](reports/1.6.0-review.md) |

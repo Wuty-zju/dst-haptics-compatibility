@@ -1,4 +1,4 @@
-# Workshop listing / 创意工坊文案 — 1.6.2
+# Workshop listing / 创意工坊文案 — 1.6.3
 
 Existing item: https://steamcommunity.com/sharedfiles/filedetails/?id=3805091756
 
@@ -39,8 +39,8 @@ Core envelopes, spatial falloff and controller curves are approximations. Some s
 
 [url=https://github.com/Wuty-zju/dst-haptics-compatibility]Source, documentation and issues[/url]
 
-## 1.6.2 Change note
+## 1.6.3 Change note
 
-切回原生模式后交还震动控制权。换手柄或关闭原版震动时会取消等待中的校准。地面和洞穴雨声按原版雨量更新，持续声静音或停止时及时清理。
+切回兼容模式或无缝换角色时，仍在播放的雨声可以继续震动。暂停恢复、换手柄后的新事件按当前输出状态去重。
 
-Returns control to native vibration after a mode change. Pending calibration is cancelled when the controller changes or vibration is disabled. Surface and cave rain follow native precipitation updates. Muting or stopping an active loop removes its contribution immediately.
+Rain and other live named sounds can resume after a seamless player swap or a switch back to Compatibility. Fresh events after pause or controller changes use the current output's deduplication history.

@@ -19,7 +19,7 @@ A client-only rumble compatibility mod for **Don't Starve Together on Windows**.
 It reads the installed game's `haptics.lua` and routes observable native sounds and
 audited action feedback through `TheInputProxy`. Servers and other players need no mod.
 
-> **GitHub stable release [1.6.2](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/tag/v1.6.2)**
+> **GitHub stable release [1.6.3](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/tag/v1.6.3)**
 > Checked against DST 762172 / Steam build 26474873: 506 definitions, 503 unique events.
 > Workshop updates are separate: publishing a GitHub release does not update Steam.
 
@@ -38,7 +38,7 @@ An event existing in the native table does not prove that a remote client can ob
 its producer. See the [1.6.0 trigger-path audit](docs/audit/1.6.0-trigger-paths.md)
 for all 14 newly defined events and their boundaries.
 
-1.6.2 fixes shared stops after returning to Native, stale calibration after controller changes, and gain updates for surface and cave rain. See the [release review](docs/reports/1.6.2-review.md) and the [native and runtime comparison for all 503 events](docs/audit/DST-Haptics-Event-Audit-1.6.2.csv).
+1.6.3 keeps live named sounds across seamless player swaps and mode changes. Returning to output after a pause or controller change clears stale deduplication. The build also checks every ZIP member. [Release review](docs/reports/1.6.3-review.md) · [Native events and adapter envelopes](docs/audit/DST-Haptics-Event-Audit-1.6.2.csv)
 
 ## Installation
 

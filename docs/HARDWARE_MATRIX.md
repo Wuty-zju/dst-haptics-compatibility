@@ -2,6 +2,8 @@
 
 Code support means DST recognizes the device type and exposes it through `TheInputProxy`. Physical acceptance additionally requires a real motor test on that route; Lua cannot infer it.
 
+The 1.6.3 review on November 21 replayed output generation changes and live named sounds in Lua 5.1. The most recent local client log still shows the Workshop build 1.5.0. Physical results for 1.6.3 require device testing. [Review and evidence](reports/1.6.3-review.md)
+
 The 1.6.2 review on November 18 replayed pause, Profile OFF and controller ID/type transitions. Two newly captured logs record 14 initializations of the subscribed 1.5.0 item. Physical motor and USB/Bluetooth acceptance for 1.6.2 is still open. [Review and evidence](reports/1.6.2-review.md)
 
 1.6.1 (2026-11-17): lifecycle ownership, GC and current-native regressions pass.
