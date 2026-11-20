@@ -126,7 +126,9 @@ function Loops.New(state, d)
         }
         state.loops[key] = loop
         if loop.volume <= 0 or loop.parameter_scale == 0 then RemixIfContributing(loop) end
-        DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, -1, ChannelFor(effect, profile), false, "loop_started", source, params, loop.parameter_scale)
+        if source ~= nil then
+            DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, -1, ChannelFor(effect, profile), false, "loop_started", source, params, loop.parameter_scale)
+        end
     end
 
     local function Remove(emitter, name)
@@ -146,6 +148,14 @@ function Loops.New(state, d)
             end
         end
         if contributed and state.had_loop_output then RefreshLoops(true) end
+    end
+    local function ForgetPlayer(player)
+        -- The caller has already stopped the retiring player's mixed output.
+        for key, loop in pairs(state.loops) do
+            if loop.entity == player or (loop.local_context and loop.effect.player_only == true) then
+                state.loops[key] = nil
+            end
+        end
     end
     local function SetVolume(emitter, name, volume)
         local loop = state.loops[LoopKey(emitter, name)]
@@ -168,7 +178,7 @@ function Loops.New(state, d)
         end
     end
     return { Key = LoopKey, Register = RegisterLoop, Refresh = RefreshLoops,
-        Remove = Remove, RemoveEmitter = RemoveEmitter, SetVolume = SetVolume,
+        Remove = Remove, RemoveEmitter = RemoveEmitter, ForgetPlayer = ForgetPlayer, SetVolume = SetVolume,
         SetParameter = SetParameter }
 end
 return Loops

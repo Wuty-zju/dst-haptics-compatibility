@@ -328,16 +328,17 @@ function Adapter.Install(config, LoadLocalModule)
         local profile = state.profiles[event]
         if profile.loop then
             local mode = OutputMode()
-            if mode == "native" then
-                return
-            elseif mode == "diagnostic" then
+            if mode == "diagnostic" then
                 HandleEvent(event, entity, name, volume, "sound", nil, local_context, params)
-                return
             end
-            -- Keep a real named sound's lifecycle even while distant, paused
-            -- or disconnected. Eligibility is re-evaluated at every sample.
-            local _, distance = SpatialFactor(effect, entity, local_context)
-            RegisterLoop(effect, emitter, entity, name, volume, profile, distance, "sound", local_context, params)
+            -- Native weather sets parameters on a continuing handle without
+            -- replaying it. Keep named starts across output mode changes.
+            if mode == "compatibility" then
+                local _, distance = SpatialFactor(effect, entity, local_context)
+                RegisterLoop(effect, emitter, entity, name, volume, profile, distance, "sound", local_context, params)
+            elseif name ~= nil then
+                RegisterLoop(effect, emitter, entity, name, volume, profile, nil, nil, local_context, params)
+            end
             return
         end
         HandleEvent(event, entity, name, volume, "sound", nil, local_context, params)
@@ -454,11 +455,16 @@ function Adapter.Install(config, LoadLocalModule)
         -- let an inactive owner attach listeners to the next world.
         if not state.installed or world_bindings[inst] ~= nil then return end
         local callbacks = {}
-        local function CancelWorldOutput(clear)
+        local function CancelWorldOutput(clear, swapping_player)
             if not state.installed then return end
             device.CancelOutput()
             if clear then
-                state.loops, state.recent, state.bridge_recent = {}, {}, {}
+                if swapping_player ~= nil then
+                    loops.ForgetPlayer(swapping_player)
+                else
+                    state.loops = {}
+                end
+                state.recent, state.bridge_recent = {}, {}
                 state.last_special_hurt_time = nil
                 state.pending_test = nil
             end
@@ -473,9 +479,11 @@ function Adapter.Install(config, LoadLocalModule)
             if state.server_paused and OutputMode() == "compatibility" then CancelWorldOutput(false) end
         end
         callbacks.playerdeactivated = function(_, player)
-            if state.installed and player == G.ThePlayer then
+            if state.installed and player ~= nil and player == G.ThePlayer then
                 state.player_active = false
-                CancelWorldOutput(true)
+                -- The world and its weather emitters survive a seamless swap.
+                -- Native clears this flag after the deactivation event.
+                CancelWorldOutput(true, player.isseamlessswapsource == true and player or nil)
             end
         end
         callbacks.onremove = function()
