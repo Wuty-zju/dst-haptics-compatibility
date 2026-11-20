@@ -1,6 +1,6 @@
 # 当前状态 / Current status
 
-更新于 2026-11-21。1.6.3 维护针对输出去重、具名声音和发布包。[详细审查](reports/1.6.3-review.md)
+更新于 2026-11-21。[1.6.3 已发布](https://github.com/Wuty-zju/dst-haptics-compatibility/releases/tag/v1.6.3)，标签 dbf9488。线上三个附件已重新下载并校验。[发布凭证](reports/1.6.3-release-receipt.md) · [详细审查](reports/1.6.3-review.md)
 
 | 项目 | 核对结果 |
 |---|---|
