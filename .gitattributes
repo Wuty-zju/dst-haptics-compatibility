@@ -4,4 +4,6 @@
 *.md text eol=lf
 *.csv text eol=crlf
 *.jpg binary
+LICENSE text eol=lf
+modicon.xml text eol=lf
 

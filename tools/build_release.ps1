@@ -4,14 +4,42 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$sourceInfo = Get-Content -LiteralPath (Join-Path $repo 'modinfo.lua') -Raw
-if ($sourceInfo -notmatch 'version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"') {
+$repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$sourceInfo = Get-Content -LiteralPath (Join-Path $repo "modinfo.lua") -Raw
+if ($sourceInfo -notmatch '(?m)^\s*version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$') {
     throw 'Missing semantic version in modinfo.lua'
 }
 $sourceVersion = $Matches[1]
 if ($Version -eq '') { $Version = $sourceVersion }
 if ($Version -ne $sourceVersion) { throw 'Requested version differs from modinfo.lua' }
+if ($sourceInfo -notmatch '(?m)^\s*client_only_mod\s*=\s*true\s*$' -or
+    $sourceInfo -notmatch '(?m)^\s*all_clients_require_mod\s*=\s*false\s*$' -or
+    $sourceInfo -notmatch '(?m)^\s*server_only_mod\s*=\s*false\s*$') {
+    throw "Client-only Workshop flags are invalid"
+}
+
+if (Test-Path -LiteralPath (Join-Path $repo ".git")) {
+    [string[]]$modules = @(git -C $repo -c core.quotepath=false ls-files --cached --deduplicate -- scripts)
+    if ($LASTEXITCODE -ne 0) { throw "Cannot list the runtime modules tracked by Git" }
+} else {
+    # A clean source archive has the same flat runtime directory as a checkout.
+    $scriptRoot = Join-Path $repo "scripts"
+    [string[]]$modules = @(Get-ChildItem -LiteralPath $scriptRoot -File -Filter "*.lua" |
+        ForEach-Object { "scripts/" + $_.Name })
+}
+if ($modules.Count -eq 0 -or @($modules | Where-Object {
+    $_ -cnotmatch '^scripts/[^/\\]+\.lua$' -or $_ -ieq "scripts/haptics.lua"
+}).Count -gt 0) {
+    throw "Expected the mod's own flat scripts/*.lua modules"
+}
+[Array]::Sort($modules, [StringComparer]::Ordinal)
+$runtime = @("modinfo.lua", "modmain.lua", "README.md", "README.en.md", "LICENSE", "modicon.tex", "modicon.xml") + $modules
+foreach ($name in ($runtime + "preview.jpg")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repo $name) -PathType Leaf)) {
+        throw "Missing release input: $name"
+    }
+}
+
 $OutputRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
 $stage = Join-Path $OutputRoot "dst_haptics_compat"
 $zip = Join-Path $OutputRoot ("dst_haptics_compat-{0}.zip" -f $Version)
@@ -23,16 +51,12 @@ foreach ($existing in @($stage, $zip, $checksum, $preview)) {
         throw "Build output already exists. Preserve it and choose a new -OutputRoot: $existing"
     }
 }
-New-Item -ItemType Directory -Path $stage -Force | Out-Null
-
-$runtime = @("modinfo.lua", "modmain.lua", "scripts", "README.md", "README.en.md", "LICENSE", "modicon.tex", "modicon.xml")
+New-Item -ItemType Directory -Path $stage | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $stage "scripts") | Out-Null
 foreach ($name in $runtime) {
-    $source = Join-Path $repo $name
-    if (-not (Test-Path -LiteralPath $source)) {
-        throw "Missing release input: $source"
-    }
-    Copy-Item -LiteralPath $source -Destination $stage -Recurse -Force
+    Copy-Item -LiteralPath (Join-Path $repo $name) -Destination (Join-Path $stage $name)
 }
+Copy-Item -LiteralPath (Join-Path $repo "preview.jpg") -Destination $preview
 
 # Source-relative developer links remain useful in a standalone Workshop ZIP.
 foreach ($readmeName in @('README.md', 'README.en.md')) {
@@ -45,25 +69,24 @@ foreach ($readmeName in @('README.md', 'README.en.md')) {
     [IO.File]::WriteAllText($readmePath, $readmeText, [Text.UTF8Encoding]::new($false))
 }
 
-$previewSource = Join-Path $repo "preview.jpg"
-if (-not (Test-Path -LiteralPath $previewSource)) {
-    throw "Missing Steam Workshop preview: $previewSource"
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$entryTime = [DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+$archive = [IO.Compression.ZipFile]::Open($zip, [IO.Compression.ZipArchiveMode]::Create)
+try {
+    foreach ($name in $runtime) {
+        $entry = $archive.CreateEntry("dst_haptics_compat/$name", [IO.Compression.CompressionLevel]::Optimal)
+        $entry.LastWriteTime = $entryTime
+        $source = [IO.File]::OpenRead((Join-Path $stage $name))
+        try {
+            $target = $entry.Open()
+            try { $source.CopyTo($target) } finally { $target.Dispose() }
+        } finally { $source.Dispose() }
+    }
+} finally {
+    $archive.Dispose()
 }
-Copy-Item -LiteralPath $previewSource -Destination $preview -Force
-
-$modinfo = Get-Content -LiteralPath (Join-Path $stage "modinfo.lua") -Raw
-if ($modinfo -notmatch ('version\s*=\s*"' + [regex]::Escape($Version) + '"')) {
-    throw "modinfo.lua version does not match $Version"
-}
-if ($modinfo -notmatch 'client_only_mod\s*=\s*true' -or
-    $modinfo -notmatch 'all_clients_require_mod\s*=\s*false' -or
-    $modinfo -notmatch 'server_only_mod\s*=\s*false') {
-    throw "Client-only Workshop flags are invalid"
-}
-
-Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-Set-Content -LiteralPath $checksum -Value ("{0}  {1}" -f $hash, (Split-Path $zip -Leaf)) -Encoding ascii
+[IO.File]::WriteAllText($checksum, ("{0}  {1}" -f $hash, (Split-Path $zip -Leaf)) + [char]10, [Text.Encoding]::ASCII)
 
 Write-Host "Workshop content: $stage"
 Write-Host "Release archive:  $zip"
