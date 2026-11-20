@@ -29,6 +29,10 @@ function Loops.New(state, d)
         return success and playing == true
     end
 
+    local function IsEntityValid(entity)
+        return entity == nil or entity.IsValid == nil or entity:IsValid()
+    end
+
     local function EmitSegment(segment)
         SuppressNative()
         G.TheInputProxy:AddVibration(loop_channel, segment.duration, segment.magnitude, false)
@@ -40,6 +44,17 @@ function Loops.New(state, d)
         return revision == state.loop_revision and generation == state.generation
     end
 
+    local function HasLiveSupport(segment, contributions)
+        for i = 1, #contributions do
+            local pulse = contributions[i]
+            if pulse.magnitude == segment.magnitude and pulse.duration - segment.delay >= segment.duration then
+                local loop = pulse.loop
+                if state.loops[pulse.key] == loop and IsEntityValid(loop.entity) and IsPlaying(loop) then return true end
+            end
+        end
+        return false
+    end
+
     local function RefreshLoops(remix)
         if next(state.loops) == nil and not state.had_loop_output then return end
         local previous_revision = state.loop_revision
@@ -49,7 +64,7 @@ function Loops.New(state, d)
         local contributions = allowed and {} or nil
         for key, loop in pairs(state.loops) do
             -- Entity lifetime is independent of whether a controller can play.
-            if loop.entity ~= nil and loop.entity.IsValid ~= nil and not loop.entity:IsValid() then
+            if not IsEntityValid(loop.entity) then
                 state.loops[key] = nil
             elseif allowed and (not remix or loop.mixed_revision == previous_revision) then
                 -- Immediate mute/kill re-mixes the previously sampled sounds.
@@ -67,7 +82,9 @@ function Loops.New(state, d)
                         * EffectScale(loop.effect, loop.profile, "_duration")
                     if magnitude > 0 and duration_scale > 0 then
                         local duration, calibrated = CalibratePulse(loop.profile.duration, magnitude, duration_scale)
-                        contributions[#contributions + 1] = { duration = duration, magnitude = calibrated }
+                        contributions[#contributions + 1] = {
+                            duration = duration, magnitude = calibrated, key = key, loop = loop,
+                        }
                         loop.mixed_revision = revision
                     end
                 elseif not remix then
@@ -86,7 +103,10 @@ function Loops.New(state, d)
                 -- The next periodic sample replaces later segments. Never leave
                 -- callbacks queued beyond that sample merely to invalidate them.
                 G.scheduler:ExecuteInTime(segment.delay, function()
-                    if IsCurrentMix(revision, generation) and OutputAllowed() and IsCurrentMix(revision, generation) then
+                    -- Native FX can retire without calling KillSound. Keep the
+                    -- planned segment only if a live source covers its full span.
+                    if IsCurrentMix(revision, generation) and OutputAllowed() and IsCurrentMix(revision, generation)
+                        and HasLiveSupport(segment, contributions) then
                         EmitSegment(segment)
                     end
                 end)
@@ -126,7 +146,9 @@ function Loops.New(state, d)
         }
         state.loops[key] = loop
         if loop.volume <= 0 or loop.parameter_scale == 0 then RemixIfContributing(loop) end
-        DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, -1, ChannelFor(effect, profile), false, "loop_started", source, params, loop.parameter_scale)
+        if source ~= nil then
+            DebugLog(effect, entity, distance, NumberOr(effect.vibration_intensity, 1), 0, -1, ChannelFor(effect, profile), false, "loop_started", source, params, loop.parameter_scale)
+        end
     end
 
     local function Remove(emitter, name)
@@ -146,6 +168,14 @@ function Loops.New(state, d)
             end
         end
         if contributed and state.had_loop_output then RefreshLoops(true) end
+    end
+    local function ForgetPlayer(player)
+        -- The caller has already stopped the retiring player's mixed output.
+        for key, loop in pairs(state.loops) do
+            if loop.entity == player or (loop.local_context and loop.effect.player_only == true) then
+                state.loops[key] = nil
+            end
+        end
     end
     local function SetVolume(emitter, name, volume)
         local loop = state.loops[LoopKey(emitter, name)]
@@ -168,7 +198,7 @@ function Loops.New(state, d)
         end
     end
     return { Key = LoopKey, Register = RegisterLoop, Refresh = RefreshLoops,
-        Remove = Remove, RemoveEmitter = RemoveEmitter, SetVolume = SetVolume,
+        Remove = Remove, RemoveEmitter = RemoveEmitter, ForgetPlayer = ForgetPlayer, SetVolume = SetVolume,
         SetParameter = SetParameter }
 end
 return Loops
