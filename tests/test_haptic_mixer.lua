@@ -16,11 +16,14 @@ local Loops = dofile(root .. "/scripts/haptic_loops.lua")
 local Util = dofile(root .. "/scripts/haptic_util.lua")
 local Parameters = dofile(root .. "/scripts/haptic_parameters.lua")
 local state = { config = {}, loops = {}, generation = 0, loop_revision = 0, metrics = { pulses = 0, parameter_updates = 0 } }
-local magnitudes, removes, playback_queries = {}, 0, 0
+local magnitudes, durations, removes, playback_queries = {}, {}, 0, 0
 local queued = {}
 local output_allowed, change_controller = true, false
 TheInputProxy = {
-    AddVibration = function(_, _, _, magnitude) magnitudes[#magnitudes + 1] = magnitude end,
+    AddVibration = function(_, _, duration, magnitude)
+        magnitudes[#magnitudes + 1] = magnitude
+        durations[#durations + 1] = duration
+    end,
     RemoveVibration = function() removes = removes + 1 end,
 }
 scheduler = {
@@ -133,4 +136,39 @@ assert(#magnitudes == 5 and magnitudes[5] == 0.8 and #queued == 1)
 change_controller = true
 queued[1]()
 assert(#magnitudes == 5, "delayed segment leaked across controller generations")
-print("loop mixer tests passed: envelope levels, sampled gain updates, immediate mute/kill and inactive lifecycle")
+
+-- Native lighter unequip removes the lighterfire FX without a KillSound call.
+-- A weak torch contribution can remain queued behind a shorter lunar hail pulse.
+local hail_effect = { event = "rifts3/lunarhail/lunar_rainAMB", vibration_intensity = 1 }
+local lighter_effect = { event = "dontstarve/wilson/lighter_LP", vibration_intensity = 1 }
+local function CheckLighterRemoval(survivor_duration, expected_pulses)
+    state.loops = {}
+    queued = {}
+    local torch, nearby_torch = Emitter(), Emitter()
+    local lighter_fx = { IsValid = function(self) return self.valid end, valid = true }
+    torch.playing, nearby_torch.playing = true, true
+    loops.Register(hail_effect, rain, nil, "rain", 0.8, { duration = 0.05, factor = 1 })
+    loops.SetParameter(rain, "rain", "intensity", 1)
+    loops.Register(lighter_effect, torch, lighter_fx, "torch", 0.4, profile)
+    loops.SetParameter(torch, "torch", "intensity", 1)
+    if survivor_duration ~= nil then
+        local nearby_fx = { IsValid = function() return true end }
+        loops.Register(lighter_effect, nearby_torch, nearby_fx, "torch", 0.4, { duration = survivor_duration, factor = 1 })
+    end
+    local before = #magnitudes
+    loops.Refresh()
+    assert(#magnitudes == before + 1 and magnitudes[#magnitudes] == 0.8
+        and durations[#durations] == 0.05 and #queued == 1, "test did not build the expected hail and lighter mix")
+    lighter_fx.valid = false
+    local previous_removes = removes
+    queued[1]()
+    assert(#magnitudes == before + 1 + expected_pulses, "delayed mix did not respect the remaining live contributions")
+    assert(removes == previous_removes and #queued == 1, "delayed mix restarted the expired hail pulse")
+    if expected_pulses == 1 then
+        assert(magnitudes[#magnitudes] == 0.4 and durations[#durations] == 0.05, "live support changed the planned tail")
+    end
+end
+CheckLighterRemoval(nil, 0)
+CheckLighterRemoval(0.08, 0) -- Same gain, but the survivor ends before this segment.
+CheckLighterRemoval(0.10, 1)
+print("loop mixer tests passed: sampled gain, immediate stops, and supported delayed segments")
