@@ -916,6 +916,63 @@ assert(#trace == 0, "paused one-shot took ownership of the controller")
 TheWorld:PushEvent("serverpauseddirty", { pause = false })
 assert(output_api.Emit("test/player", player, { source = "sound" }))
 assert(#vibrations == before + 1, "paused one-shot deduplicated a valid event on immediate resume")
+
+local function CheckFreshEvent(label, transition, from_bridge)
+    now = now + 1
+    local count = #vibrations
+    SoundEmitter.PlaySound(player_emitter, "test/player")
+    assert(#vibrations == count + 1)
+    local generation = output_api.GetGeneration()
+    now = now + 0.033
+    transition()
+    if from_bridge then
+        output_api.Emit("test/player", player, { source = "server_confirmed_work", semantic_key = label })
+    else
+        SoundEmitter.PlaySound(player_emitter, "test/player")
+    end
+    assert(output_api.GetGeneration() ~= generation, label .. " did not invalidate output")
+    assert(#vibrations == count + 2, label .. " deduplicated an event against cancelled output")
+end
+CheckFreshEvent("Controller index change", function() controller_id = 1 end)
+CheckFreshEvent("Controller type change", function() controller_type = 2 end, true)
+CheckFreshEvent("Server pause/resume", function()
+    TheWorld:PushEvent("serverpauseddirty", { pause = true })
+    TheWorld:PushEvent("serverpauseddirty", { pause = false })
+end)
+CheckFreshEvent("Sampled Profile OFF", function()
+    profile_enabled = false
+    TickOutputs()
+    profile_enabled = true
+end)
+CheckFreshEvent("Compatibility settings", function() output_api.ApplyConfig({ strength = 0.9 }) end)
+CheckFreshEvent("Native round trip", function()
+    output_api.ApplyConfig({ output_mode = "native" })
+    output_api.ApplyConfig({ output_mode = "compatibility" })
+end)
+
+now = now + 1
+SoundEmitter.PlaySound(focal_emitter, "dontstarve/wilson/burned")
+now = now + 0.05
+assert(output_api.HasRecentSpecialHurt(), "current special hurt lost priority")
+controller_type = 7
+assert(output_api.CanObserve())
+assert(not output_api.HasRecentSpecialHurt(), "cancelled special hurt suppressed a new controller's feedback")
+
+-- A same-source retry must not extend the cross-route window.
+now = now + 1
+local first_sound = now
+before = #vibrations
+SoundEmitter.PlaySound(player_emitter, "test/player")
+now = first_sound + 0.02
+assert(not output_api.Emit("test/player", player, { source = "server_confirmed_work", semantic_key = "paired" }),
+    "valid cross-route dedupe was lost")
+now = first_sound + 0.035
+SoundEmitter.PlaySound(player_emitter, "test/player")
+assert(#vibrations == before + 1, "valid same-source dedupe was lost")
+now = first_sound + 0.1
+assert(output_api.Emit("test/player", player, { source = "server_confirmed_work", semantic_key = "distinct" }),
+    "rejected sound replay extended cross-route dedupe")
+assert(#vibrations == before + 2)
 output_api.Shutdown()
 
 print("adapter behavior tests passed")
