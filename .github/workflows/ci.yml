@@ -29,10 +29,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build clean Workshop package
+      - name: Build Workshop package with an untracked scratch file present
         shell: pwsh
-        run: ./tools/build_release.ps1
-      - name: Check package layout and preserve existing artifacts
+        run: |
+          $scratch = Join-Path scripts ('scratch-' + [guid]::NewGuid().ToString('n') + '.lua')
+          Set-Content -LiteralPath $scratch -Value '-- Local scratch file. The packager must exclude it.'
+          ./tools/build_release.ps1
+      - name: Check layout, reproducible output and artifact preservation
         shell: pwsh
         run: |
           $root = 'build/release'
@@ -56,12 +59,23 @@ jobs:
           $archive = [IO.Compression.ZipFile]::OpenRead($zip[0].FullName)
           try {
             $names = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
-            if ('dst_haptics_compat/modinfo.lua' -notin $names -or 'dst_haptics_compat/modmain.lua' -notin $names) { throw 'Missing runtime roots' }
-            foreach ($name in $names) {
-              if ($name -notmatch '^dst_haptics_compat/(scripts/[^/]+\.lua|modinfo\.lua|modmain\.lua|modicon\.(tex|xml)|README(\.en)?\.md|LICENSE)$') { throw "Unexpected release content: $name" }
+            $packageFiles = @('modinfo.lua', 'modmain.lua', 'README.md', 'README.en.md', 'LICENSE', 'modicon.tex', 'modicon.xml')
+            $packageFiles += @(git ls-files --cached -- scripts)
+            $expectedNames = @($packageFiles | ForEach-Object { "dst_haptics_compat/$_" })
+            if ($names.Count -ne $expectedNames.Count -or @(Compare-Object $expectedNames $names -CaseSensitive).Count -ne 0) {
+              throw 'Unexpected or missing release content'
             }
           } finally { $archive.Dispose() }
           if ((Get-Item -LiteralPath (Join-Path $root 'preview.jpg')).Length -ge 1MB) { throw 'Preview is too large' }
+          $repeat = 'build/repeated-package'
+          (Get-Item -LiteralPath modmain.lua).LastWriteTime = [DateTime]::Now.AddDays(-7)
+          ./tools/build_release.ps1 -OutputRoot $repeat
+          foreach ($file in $files) {
+            $repeatFile = Join-Path $repeat $file.Name
+            if ((Get-FileHash -LiteralPath $repeatFile -Algorithm SHA256).Hash -ne $before[$file.Name]) {
+              throw "Rebuild produced a different artifact: $($file.Name)"
+            }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: dst-haptics-compat
